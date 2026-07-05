@@ -41,24 +41,27 @@ cprint() {
   fi
 }
 
+# Resolve the output file descriptor for text UI.
+text_fd() { printf '%s' "${1:-${TTY_FD:-1}}"; }
+
 # Display a title
-title() { cprint 1 "$BLUE" "${1}\n"; }
+title() { cprint "$(text_fd "${2:-}")" "$BLUE" "${1}\n"; }
 # Display a message
-msg() { cprint 1 "$COLOR_OFF" "${1}\n"; }
+msg() { cprint "$(text_fd "${2:-}")" "$COLOR_OFF" "${1}\n"; }
 # Display a highlighted message
-highlight() { cprint 1 "$WHITE" "${1}\n"; }
+highlight() { cprint "$(text_fd "${2:-}")" "$WHITE" "${1}\n"; }
 # Display a status line
-status() { cprint 1 "$WHITE" "${1}"; }
+status() { cprint "$(text_fd "${2:-}")" "$WHITE" "${1}"; }
 # Display code or terminal commands
-show_code() { cprint 1 "$WHITE" "->  ${1}\n"; }
+show_code() { cprint "$(text_fd "${2:-}")" "$WHITE" "->  ${1}\n"; }
 # Display a success message
-success() { cprint 1 "$GREEN" "OK: ${1}\n"; }
+success() { cprint "$(text_fd "${2:-}")" "$GREEN" "OK: ${1}\n"; }
 # Display a failure message
-fail() { cprint 2 "$RED" "${1}\n"; }
+fail() { cprint "$(text_fd "${2:-}")" "$RED" "${1}\n"; }
 # Display an error message
-error() { cprint 2 "$RED" "ERROR: ${1}\n"; }
+error() { cprint "$(text_fd "${2:-}")" "$RED" "ERROR: ${1}\n"; }
 # Display a warning message
-warning() { cprint 1 "$YELLOW" "WARN: ${1}\n"; }
+warning() { cprint "$(text_fd "${2:-}")" "$YELLOW" "WARN: ${1}\n"; }
 # Display an error, if function argument is not provided
 bad_arg() { error "$1 called without argument: $2"; return 1; }
 
@@ -93,10 +96,11 @@ confirm_or_exit() {
 # Prompt user to choose a single option out of a list
 # Adapted from: https://unix.stackexchange.com/a/415155
 single_choice() {
-  local TTY_FD="${5:-1}"
+  local FD
+  FD="$(text_fd "${5:-}")"
 
   # Validate that the terminal is interactive
-  if ! [[ -t 0 && -t "$TTY_FD" ]]; then
+  if ! [[ -t 0 && -t "$FD" ]]; then
     error "${FUNCNAME[0]} requires an interactive terminal"
     return 1
   fi
@@ -118,9 +122,9 @@ single_choice() {
   fi
 
   # Print out title, subtitle and instructions
-  [[ -n "${TITLE}" ]] && title "$TTY_FD" "$BLUE" "${TITLE}\n"
-  [[ -n "${SUBTITLE}" ]] && highlight "$TTY_FD" "$WHITE" "${SUBTITLE}\n"
-  printf '%s\n' "[ Navigate (Up/Down) | Confirm (Enter) ]" >&"$TTY_FD"
+  [[ -n "${TITLE}" ]] && title "$TITLE" "$FD"
+  [[ -n "${SUBTITLE}" ]] && highlight "$SUBTITLE" "$FD"
+  printf '%s\n' "[ Navigate (Up/Down) | Confirm (Enter) ]" >&"$FD"
 
   # Print the upper table border
   local MAX_LEN HR ESC OPTION
@@ -128,25 +132,25 @@ single_choice() {
   MAX_LEN=$(printf '%s\n' "${OPTIONS_LIST[@]}" |
     awk '{ if (length > max) max = length } END { print max }')
   printf -v HR '%*s'  "$((MAX_LEN+7))" '' && HR=${HR// /—}
-  printf '%s\n' "$HR" >&"$TTY_FD"
+  printf '%s\n' "$HR" >&"$FD"
 
   # Helper functions for terminal print control and key input
   ESC=$'\033'
-  cursor_blink_on()  { printf "$ESC[?25h" >&"$TTY_FD"; }
-  cursor_blink_off() { printf "$ESC[?25l" >&"$TTY_FD"; }
-  cursor_to()        { printf "$ESC[$1;${2:-1}H" >&"$TTY_FD"; }
-  print_option()   { printf '[ ]   %s ' "$1" >&"$TTY_FD"; }
-  print_selected() { printf '[+]  %s[7m %s %s[27m' "$ESC" "$1" "$ESC" >&"$TTY_FD"; }
-  get_cursor_row()   { printf '\E[6n' >&"$TTY_FD"; IFS=';' read -sdR ROW COL; echo ${ROW#*[}; }
+  cursor_blink_on()  { printf "$ESC[?25h" >&"$FD"; }
+  cursor_blink_off() { printf "$ESC[?25l" >&"$FD"; }
+  cursor_to()        { printf "$ESC[$1;${2:-1}H" >&"$FD"; }
+  print_option()   { printf '[ ]   %s ' "$1" >&"$FD"; }
+  print_selected() { printf '[+]  %s[7m %s %s[27m' "$ESC" "$1" "$ESC" >&"$FD"; }
+  get_cursor_row()   { printf '\E[6n' >&"$FD"; IFS=';' read -sdR ROW COL; echo ${ROW#*[}; }
   key_input()        { read -s -n3 KEY 2>/dev/null >&2
                         if [[ $KEY = $ESC[A ]]; then echo up;    fi
                         if [[ $KEY = $ESC[B ]]; then echo down;  fi
                         if [[ $KEY = ""     ]]; then echo enter; fi; }
 
   # Initially print empty new lines (scroll down if at bottom of screen)
-  for OPTION in "${OPTIONS_LIST[@]}"; do printf "\n" >&"$TTY_FD"; done
+  for OPTION in "${OPTIONS_LIST[@]}"; do printf "\n" >&"$FD"; done
   # Print the lower table border
-  printf '%s\n' "$HR" >&"$TTY_FD"
+  printf '%s\n' "$HR" >&"$FD"
 
   # Determine current screen position for overwriting the options
   local LAST_ROW=$(get_cursor_row)
