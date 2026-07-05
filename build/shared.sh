@@ -52,19 +52,21 @@ cprint() {
 # Display a title
 title() { cprint 1 "$BLUE" "${1}\n"; }
 # Display a message
-msg() { cprint 1 "$WHITE" "${1}\n"; }
+msg() { cprint 1 "$COLOR_OFF" "${1}\n"; }
+# Display a highlighted message
+highlight() { cprint 1 "$COLOR_OFF" "${1}\n"; }
 # Display a status line
 status() { cprint 1 "$WHITE" "${1}"; }
 # Display code or terminal commands
 show_code() { cprint 1 "$WHITE" "->  ${1}\n"; }
 # Display a success message
-success() { cprint 1 "$GREEN" "${1}\n"; }
+success() { cprint 1 "$GREEN" "OK: ${1}\n"; }
 # Display a failure message
 fail() { cprint 2 "$RED" "${1}\n"; }
 # Display an error message
 error() { cprint 2 "$RED" "ERROR: ${1}\n"; }
 # Display a warning message
-warning() { cprint 1 "$YELLOW" "WARNING: ${1}\n"; }
+warning() { cprint 1 "$YELLOW" "WARN: ${1}\n"; }
 # Display an error, if function argument is not provided
 bad_arg() { error "$1 called without argument: $2"; return 1; }
 

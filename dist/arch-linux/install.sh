@@ -53,19 +53,21 @@ cprint() {
 # Display a title
 title() { cprint 1 "$BLUE" "${1}\n"; }
 # Display a message
-msg() { cprint 1 "$WHITE" "${1}\n"; }
+msg() { cprint 1 "$COLOR_OFF" "${1}\n"; }
+# Display a highlighted message
+highlight() { cprint 1 "$COLOR_OFF" "${1}\n"; }
 # Display a status line
 status() { cprint 1 "$WHITE" "${1}"; }
 # Display code or terminal commands
 show_code() { cprint 1 "$WHITE" "->  ${1}\n"; }
 # Display a success message
-success() { cprint 1 "$GREEN" "${1}\n"; }
+success() { cprint 1 "$GREEN" "OK: ${1}\n"; }
 # Display a failure message
 fail() { cprint 2 "$RED" "${1}\n"; }
 # Display an error message
 error() { cprint 2 "$RED" "ERROR: ${1}\n"; }
 # Display a warning message
-warning() { cprint 1 "$YELLOW" "WARNING: ${1}\n"; }
+warning() { cprint 1 "$YELLOW" "WARN: ${1}\n"; }
 # Display an error, if function argument is not provided
 bad_arg() { error "$1 called without argument: $2"; return 1; }
 
@@ -435,11 +437,12 @@ catch_wrong () {
 
 # Instructions for setting up Internet connection.
 HELP_INTERNET () {
+  title "\n<< INTERNET CONFIGURATION >>"
   MSG_STR="Before proceeding with the installation, "
-  MSG_STR+="please make sure you have a functional Internet connection. "
+  MSG_STR+="please make sure you have a functional Internet connection.\n"
   MSG_STR+="You can either connect via an Ethernet cable or "
   MSG_STR+="establish a wireless connection."
-  title "${MSG_STR}"
+  highlight "${MSG_STR}"
   msg "To list all network interfaces, run:"
   show_code "ip link show"
   msg "To list all wireless network interfaces, use:"
@@ -460,7 +463,8 @@ HELP_INTERNET () {
 
 # Instructions for resetting the Secure Boot.
 HELP_SECURE_BOOT () {
-  title "Full Secure Boot reset is recommended before using this script."
+  title "\n<< SECURE BOOT RESET >>"
+  highlight "Full Secure Boot reset is recommended before using this script."
   msg "To perform the reset:"
   msg "- Enter BIOS firmware (by pressing F1/F2/F10/Esc/Enter/Del at boot)"
   msg "- Navigate to the \"Security\" settings tab"
@@ -471,11 +475,12 @@ HELP_SECURE_BOOT () {
 
 # Instructions for setting up the UEFI bootloader.
 HELP_UEFI () {
-  MSG_STR="To boot into the newly installed Arch Linux, its Unified Kernel"
-  MSG_STR+=" Image should be added to the UEFI bootloader. "
-  MSG_STR+="This is done by the script automatically. But you need to set up "
-  MSG_STR+="the boot order by hand."
-  title "${MSG_STR}"
+  title "\n<< UEFI BOOTLOADER CONFIGURATION >>"
+  MSG_STR="To boot into the newly installed Arch Linux, "
+  MSG_STR+="its Unified Kernel Image should be added to the UEFI bootloader.\n"
+  MSG_STR+="Installation script does this automatically. "
+  MSG_STR+="But you might want to set up the boot order manually."
+  highlight "${MSG_STR}"
   msg "To list current UEFI boot options, run:"
   show_code "efibootmgr"
   msg "To configure the desired boot order, use:"
