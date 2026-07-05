@@ -421,7 +421,7 @@ get_next_free_partition_number() {
 confirm() {
   ask RESPONSE "${1} [Y/n]?"
   if [[ ${RESPONSE,,} =~ ^(n|no)$ ]]; then
-    fail "Cancelling installation!"
+    fail "\nCancelling installation!"
     unmount_drives
     exit
   fi
@@ -705,15 +705,13 @@ if [ "$SCRIPT_MODE" -le 0 ]; then
 
   # Test Internet connection
   status "\nTesting Internet connection (takes few seconds): "
-  ping -w 5 archlinux11111.org &>/dev/null
-  NREACHED=${?}
-  if [ ${NREACHED} -ne 0 ]; then
-    fail "FAILED!"
-    HELP_INTERNET
-    exit 1
-  else
+  if ping -w 5 archlinux11111.org &>/dev/null; then
     success "SUCCESS!"
     timedatectl set-ntp true
+  else
+    fail "FAILED!"
+    HELP_INTERNET
+    exit
   fi
 
   # Check system clock synchronization
