@@ -525,37 +525,39 @@ require_resume_state () {
   enable_cleanup_trap
 }
 
-# If already mounted: unmount drives, close LVM group and close LUKS container.
+# Unmount volumes, close LVM group, close LUKS container
 cleanup_mounts () {
   local rc=0
-  set +e
-  [ -f "${CACHE_FILE:-}" ] && source "${CACHE_FILE}"
-  title "Unmounting drives:"
+  status "Cleaning up mounts: "
+  # Unmount boot partition
   if mountpoint -q /mnt/efi; then
     umount /mnt/efi || rc=1
   fi
+  # Switch off swap
   if swapon --show=NAME --noheadings | grep -Fxq "${SWAP:-/dev/mapper/main-swap}"; then
     swapoff "${SWAP:-/dev/mapper/main-swap}" || rc=1
   fi
+  # Unmount root partition
   if mountpoint -q /mnt; then
     umount /mnt || rc=1
   fi
+  # Close LVM group
   if vgs main >/dev/null 2>&1; then
     vgchange -a n main || rc=1
   fi
+  # Close LUKS container
   if cryptsetup status lvm >/dev/null 2>&1; then
     cryptsetup close lvm || rc=1
   fi
-  set -e
+  success "Drives unmounted!" 
   return "$rc"
 }
 
 # Unmount drives after a cancelled or failed installation
 unmount_drives () {
-  load_cache
   trap - EXIT ERR INT TERM
   cleanup_mounts
-  success "Drives unmounted!" ; exit
+  exit
 }
 
 # Handle installation errors by cleaning up mounted filesystems before exiting.
