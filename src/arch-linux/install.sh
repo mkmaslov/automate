@@ -106,7 +106,7 @@ load_cache () {
 }
 
 # Verify that a paused installation can be resumed from the selected step.
-require_resume_state () {
+validate_resume () {
   local rc=0
   load_cache
   if ! cryptsetup status lvm >/dev/null 2>&1; then
@@ -165,7 +165,6 @@ cleanup_mounts () {
 unmount_drives () {
   trap - EXIT ERR INT TERM
   cleanup_mounts
-  exit
 }
 
 # Handle installation errors by cleaning up mounted filesystems before exiting.
@@ -211,21 +210,17 @@ options=("Begin full installation (default)" \
 single_choice result options "$title" "$subtitle"
 SCRIPT_MODE="${result}"
 
-# If selected - unmount drives
-[ ${SCRIPT_MODE} -eq 6 ] && unmount_drives
-
-# If selected - show instructions
+clear
 case "${SCRIPT_MODE}" in
-  7) clear && HELP_INTERNET && exit ;;
-  8) clear && HELP_SECURE_BOOT && exit ;;
-  9) clear && HELP_UEFI && exit ;;
+  # Validate that filesystems are mounted and cash exists
+  2|3|4|5) clear ; validate_resume ;;
+  # Unmount drives
+  6) unmount_drives ; exit ;;
+  # Show instructions
+  7) clear ; HELP_INTERNET ; exit ;;
+  8) clear ; HELP_SECURE_BOOT ; exit ;;
+  9) clear ; HELP_UEFI ; exit ;;
 esac
-
-# If resuming after the disk configuration,
-# verify that required filesystems are mounted and encrypted volumes are open
-if [ "$SCRIPT_MODE" -ge 2 ] && [ "$SCRIPT_MODE" -le 5 ]; then
-  require_resume_state
-fi
 
 # -----------------------------------------------------------------------------
 # Initial checks
@@ -348,9 +343,9 @@ fi
 # -----------------------------------------------------------------------------
 
 if [ "$SCRIPT_MODE" -le 1 ]; then
-  # Clear CLI output.
+  # Clear CLI output
   load_cache ; clear ; title "<< DISK CONFIGURATION >>\n"
-  #Choose the target drive.
+  # Choose the target drive
   title="Choose a target drive for the installation:"
   subtitle="(entire block device, not a partition)"
   # Obtain information about disk drives.
@@ -440,128 +435,127 @@ if [ "$SCRIPT_MODE" -le 1 ]; then
     echo "ROOT_UUID=${ROOT_UUID}" >> ${CACHE_FILE}
     confirm "Do you want to proceed with the installation"
 
+fi
+
+
+# -----------------------------------------------------------------------------
+# Package installation.
+# -----------------------------------------------------------------------------
+
+if [ "$SCRIPT_MODE" -le 2 ]; then
+  title "<< PACKAGE INSTALLATION >>\n"
+  # Provide instructions for updating pacman keys.
+  title "Is your USB installation medium too old?"
+  MSG_STR="If you have created the USB installation medium several months ago, "
+  MSG_STR+="package manager keys may have become outdated. In this case, "
+  MSG_STR+="next operation will fail. If it does, update pacman keys, by running:"
+  msg "${MSG_STR}"
+  show_code "pacman-key --refresh-keys"
+  msg "This operation takes few minutes, hence it is disabled by default."
+  confirm "Did you read the above information"
+  # Optimize pacman.
+  title "\nLooking up fastest download mirrors, please wait and ignore warnings."
+  # Enable parallel downloads for pacstrap.
+  sed -i 's,#ParallelDownloads = 5,ParallelDownloads = 25,g' /etc/pacman.conf
+  sed -i 's,ParallelDownloads = 5,ParallelDownloads = 25,g' /etc/pacman.conf
+  # Find fastest pacman mirrors.
+  reflector --country Austria,Germany --latest 15 --protocol https \
+    --sort rate --save /etc/pacman.d/mirrorlist
+  # Update pacman cache.
+  pacman -Sy
+  # Create a list of packages.
+  PKGS=()
+  # Base Arch Linux system.
+  PKGS+=(base base-devel linux)
+  # Device firmware.
+  PKGS+=(linux-firmware linux-firmware-qlogic linux-firmware-liquidio)
+  PKGS+=(linux-firmware-mellanox linux-firmware-nfp)
+  PKGS+=(sof-firmware alsa-firmware "${MICROCODE}")
+  # UEFI and Secure Boot tools.
+  PKGS+=(efibootmgr sbctl fwupd)
+  # Logical volumes support.
+  PKGS+=(lvm2)
+  # Documentation.
+  PKGS+=(man-db man-pages texinfo)
+  # CLI tools.
+  PKGS+=(zsh audit tmux neovim btop git go jq rsync powertop fdupes)
+  # CLI fonts.
+  PKGS+=(terminus-font)
+  # Networking tools.
+  PKGS+=(networkmanager wpa_supplicant ufw iptables-nft)
+  # Software for a personal computer:
+  if [ "${SERVER_MODE}" -eq 0 ]; then
+    # GNOME desktop environment - base packages.
+    PKGS+=(gdm gnome-control-center gnome-terminal)
+    PKGS+=(wl-clipboard gnome-keyring xdg-desktop-portal)
+    # xdg-desktop-portal-gnome installs:
+    # wayland, nautilus, xdg-user-dirs-gtk, xdg-desktop-portal-gtk
+    PKGS+=(xdg-desktop-portal-gnome)
+    PKGS+=(network-manager-applet)
+    # Audio: pipewire is installed as dependency of gdm -> mutter.
+    PKGS+=(pipewire-pulse pipewire-alsa pipewire-jack)
+    # Graphic splash screen for luks decryption.
+    PKGS+=(plymouth)
+    # Fonts.
+    PKGS+=(adobe-source-code-pro-fonts otf-montserrat)
+    PKGS+=(adobe-source-sans-fonts adobe-source-serif-fonts)
+    PKGS+=(adobe-source-han-sans-otc-fonts adobe-source-han-serif-otc-fonts)
+    PKGS+=(ttf-sourcecodepro-nerd)
+    # Flatpak: tools for sandboxing applications.
+    PKGS+=(flatpak)
   fi
-
-
-  # -----------------------------------------------------------------------------
-  # Package installation.
-  # -----------------------------------------------------------------------------
-
-  if [ "$SCRIPT_MODE" -le 2 ]; then
-    # Clear CLI output.
-    load_cache ; clear ; title "<< PACKAGE INSTALLATION >>\n"
-    # Provide instructions for updating pacman keys.
-    title "Is your USB installation medium too old?"
-    MSG_STR="If you have created the USB installation medium several months ago, "
-    MSG_STR+="package manager keys may have become outdated. In this case, "
-    MSG_STR+="next operation will fail. If it does, update pacman keys, by running:"
-    msg "${MSG_STR}"
-    show_code "pacman-key --refresh-keys"
-    msg "This operation takes few minutes, hence it is disabled by default."
-    confirm "Did you read the above information"
-    # Optimize pacman.
-    title "\nLooking up fastest download mirrors, please wait and ignore warnings."
-    # Enable parallel downloads for pacstrap.
-    sed -i 's,#ParallelDownloads = 5,ParallelDownloads = 25,g' /etc/pacman.conf
-    sed -i 's,ParallelDownloads = 5,ParallelDownloads = 25,g' /etc/pacman.conf
-    # Find fastest pacman mirrors.
-    reflector --country Austria,Germany --latest 15 --protocol https \
-      --sort rate --save /etc/pacman.d/mirrorlist
-    # Update pacman cache.
-    pacman -Sy
-    # Create a list of packages.
-    PKGS=()
-    # Base Arch Linux system.
-    PKGS+=(base base-devel linux)
-    # Device firmware.
-    PKGS+=(linux-firmware linux-firmware-qlogic linux-firmware-liquidio)
-    PKGS+=(linux-firmware-mellanox linux-firmware-nfp)
-    PKGS+=(sof-firmware alsa-firmware "${MICROCODE}")
-    # UEFI and Secure Boot tools.
-    PKGS+=(efibootmgr sbctl fwupd)
-    # Logical volumes support.
-    PKGS+=(lvm2)
-    # Documentation.
-    PKGS+=(man-db man-pages texinfo)
-    # CLI tools.
-    PKGS+=(zsh audit tmux neovim btop git go jq rsync powertop fdupes)
-    # CLI fonts.
-    PKGS+=(terminus-font)
-    # Networking tools.
-    PKGS+=(networkmanager wpa_supplicant ufw iptables-nft)
-    # Software for a personal computer:
-    if [ "${SERVER_MODE}" -eq 0 ]; then
-      # GNOME desktop environment - base packages.
-      PKGS+=(gdm gnome-control-center gnome-terminal)
-      PKGS+=(wl-clipboard gnome-keyring xdg-desktop-portal)
-      # xdg-desktop-portal-gnome installs:
-      # wayland, nautilus, xdg-user-dirs-gtk, xdg-desktop-portal-gtk
-      PKGS+=(xdg-desktop-portal-gnome)
-      PKGS+=(network-manager-applet)
-      # Audio: pipewire is installed as dependency of gdm -> mutter.
-      PKGS+=(pipewire-pulse pipewire-alsa pipewire-jack)
-      # Graphic splash screen for luks decryption.
-      PKGS+=(plymouth)
-      # Fonts.
-      PKGS+=(adobe-source-code-pro-fonts otf-montserrat)
-      PKGS+=(adobe-source-sans-fonts adobe-source-serif-fonts)
-      PKGS+=(adobe-source-han-sans-otc-fonts adobe-source-han-serif-otc-fonts)
-      PKGS+=(ttf-sourcecodepro-nerd)
-      # Flatpak: tools for sandboxing applications.
-      PKGS+=(flatpak)
-    fi
-    # Intel/AMD iGPU drivers (default)
-    if [ "${MICROCODE}" = "intel-ucode" ]; then
-      PKGS+=(mesa vulkan-intel)
-    else
-      PKGS+=(mesa vulkan-radeon)
-    fi
-    # NVIDIA dGPU drivers (if requested)
-    if [ "${GPU_MODE}" -eq 1 ]; then
-      PKGS+=(nvidia)
-    fi
-    # AMD dGPU drivers (if requested)
-    if [ "${GPU_MODE}" -eq 2 ]; then
-      PKGS+=(vulkan-radeon libva-mesa-driver mesa-vdpau)
-    fi
-    # Hardening tools (if requested)
-    if [ "${SECURITY_MODE}" -eq 1 ]; then
-      PKGS+=(apparmor)
-    fi
-    # Server software (if requested)
-    if [ "${SERVER_MODE}" -eq 1 ]; then
-      # Minimalistic SSH server implementation, good for initramfs
-      PKGS+=(dropbear)
-      # Docker
-      PKGS+=(docker docker-compose)
-    fi
-    # Install packages to the / (root) partition.
-    catch_wrong pacstrap -K /mnt "${PKGS[@]}"
-    success "Basic packages installed successfully!"
-    confirm "Do you want to proceed with the installation"
-    # Enable daemons.
-    systemctl enable ufw.service --root=/mnt &>/dev/null
-    systemctl enable auditd.service --root=/mnt &>/dev/null
-    systemctl enable bluetooth --root=/mnt &>/dev/null
-    systemctl enable NetworkManager --root=/mnt &>/dev/null
-    systemctl enable wpa_supplicant.service --root=/mnt &>/dev/null
-    systemctl enable systemd-resolved.service --root=/mnt &>/dev/null
-    systemctl enable gdm.service --root=/mnt &>/dev/null
-    systemctl enable systemd-timesyncd.service --root=/mnt &>/dev/null
-    if [ "${GPU_MODE}" -eq 1 ]; then
-      systemctl enable nvidia-suspend.service --root=/mnt &>/dev/null
-      systemctl enable nvidia-hibernate.service --root=/mnt &>/dev/null
-      systemctl enable nvidia-resume.service --root=/mnt &>/dev/null
-    fi
-    if [ "${SECURITY_MODE}" -eq 1 ]; then
-      systemctl enable apparmor.service --root=/mnt &>/dev/null
-    fi
-    # Mask unused services.
-    systemctl mask geoclue.service --root=/mnt &>/dev/null
-    systemctl mask org.gnome.SettingsDaemon.Wacom.service --root=/mnt &>/dev/null
-    systemctl mask org.gnome.SettingsDaemon.Smartcard.service --root=/mnt &>/dev/null
-
+  # Intel/AMD iGPU drivers (default)
+  if [ "${MICROCODE}" = "intel-ucode" ]; then
+    PKGS+=(mesa vulkan-intel)
+  else
+    PKGS+=(mesa vulkan-radeon)
   fi
+  # NVIDIA dGPU drivers (if requested)
+  if [ "${GPU_MODE}" -eq 1 ]; then
+    PKGS+=(nvidia)
+  fi
+  # AMD dGPU drivers (if requested)
+  if [ "${GPU_MODE}" -eq 2 ]; then
+    PKGS+=(vulkan-radeon libva-mesa-driver mesa-vdpau)
+  fi
+  # Hardening tools (if requested)
+  if [ "${SECURITY_MODE}" -eq 1 ]; then
+    PKGS+=(apparmor)
+  fi
+  # Server software (if requested)
+  if [ "${SERVER_MODE}" -eq 1 ]; then
+    # Minimalistic SSH server implementation, good for initramfs
+    PKGS+=(dropbear)
+    # Docker
+    PKGS+=(docker docker-compose)
+  fi
+  # Install packages to the / (root) partition.
+  catch_wrong pacstrap -K /mnt "${PKGS[@]}"
+  success "Basic packages installed successfully!"
+  confirm "Do you want to proceed with the installation"
+  # Enable daemons.
+  systemctl enable ufw.service --root=/mnt &>/dev/null
+  systemctl enable auditd.service --root=/mnt &>/dev/null
+  systemctl enable bluetooth --root=/mnt &>/dev/null
+  systemctl enable NetworkManager --root=/mnt &>/dev/null
+  systemctl enable wpa_supplicant.service --root=/mnt &>/dev/null
+  systemctl enable systemd-resolved.service --root=/mnt &>/dev/null
+  systemctl enable gdm.service --root=/mnt &>/dev/null
+  systemctl enable systemd-timesyncd.service --root=/mnt &>/dev/null
+  if [ "${GPU_MODE}" -eq 1 ]; then
+    systemctl enable nvidia-suspend.service --root=/mnt &>/dev/null
+    systemctl enable nvidia-hibernate.service --root=/mnt &>/dev/null
+    systemctl enable nvidia-resume.service --root=/mnt &>/dev/null
+  fi
+  if [ "${SECURITY_MODE}" -eq 1 ]; then
+    systemctl enable apparmor.service --root=/mnt &>/dev/null
+  fi
+  # Mask unused services.
+  systemctl mask geoclue.service --root=/mnt &>/dev/null
+  systemctl mask org.gnome.SettingsDaemon.Wacom.service --root=/mnt &>/dev/null
+  systemctl mask org.gnome.SettingsDaemon.Smartcard.service --root=/mnt &>/dev/null
+
+fi
 
 
   # -----------------------------------------------------------------------------
