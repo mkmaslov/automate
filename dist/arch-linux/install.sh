@@ -780,8 +780,10 @@ if [ "$SCRIPT_MODE" -le 1 ]; then
   # Notify kernel about filesystem changes and fetch partition labels
   highlight "Updating information about disk partitions, please wait."
   sleep 5 ; partprobe ${DISK} ; sleep 5
-  EFI="/dev/$(lsblk ${DISK} -o NAME,PARTLABEL | grep LINEFI | cut -d " " -f1 | cut -c7-)"
-  LVM="/dev/$(lsblk ${DISK} -o NAME,PARTLABEL | grep LVM | cut -d " " -f1 | cut -c7-)"
+  #EFI="/dev/$(lsblk ${DISK} -o NAME,PARTLABEL | grep LINEFI | cut -d " " -f1 | cut -c7-)"
+  EFI="$(lsblk -nrpo NAME,PARTLABEL "${DISK}" | awk '$2 == "LINEFI" { print $1; exit }')"
+  #LVM="/dev/$(lsblk ${DISK} -o NAME,PARTLABEL | grep LVM | cut -d " " -f1 | cut -c7-)"
+  LVM="$(lsblk -nrpo NAME,PARTLABEL "${DISK}" | awk '$2 == "LVM" { print $1; exit }')"
   echo "EFI=${EFI}" >> ${CACHE_FILE}
   echo "LVM=${LVM}" >> ${CACHE_FILE}
 
