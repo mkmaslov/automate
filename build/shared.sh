@@ -307,11 +307,17 @@ enforce_cmds() {
 
 # Retry command until it succeeds
 retry_cmd () {
+  local interrupted=0
+  trap 'interrupted=1' INT
   until "$@"; do
     local status=$?
-    [ "$status" -eq 130 ] && return "$status"
+    if [ "$interrupted" -eq 1 ] || [ "$status" -eq 130 ]; then
+      trap - INT
+      return 130
+    fi
     warning "command failed with status ${status}. Retrying..."
   done
+  trap - INT
 }
 
 #------------------------------------------------------------------------------
