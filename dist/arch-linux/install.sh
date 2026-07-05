@@ -420,9 +420,10 @@ get_next_free_partition_number() {
 # for continuing installation is fulfilled. If not - cancel the installation.
 confirm() {
   ask RESPONSE "${1} [Y/n]?"
-  if [[ ${RESPONSE} =~ ^(no|n|N|NO|No)$ ]]; then
-    error "Cancelling installation!"
+  if [[ ${RESPONSE,,} =~ ^(n|no)$ ]]; then
+    fail "Cancelling installation!"
     unmount_drives
+    exit
   fi
 }
 
@@ -696,9 +697,10 @@ if [ "$SCRIPT_MODE" -le 0 ]; then
   fi
 
   # Check whether Secure Boot is disabled
-  HELP_SECURE_BOOT
-  title "Verifying Secure Boot status. The output should contain: disabled (setup)."
-  bootctl status | grep --color "Secure Boot"
+  MSG_STR="\nVerifying Secure Boot status. "
+  MSG_STR+="The output should contain: disabled (setup)."
+  highlight "${MSG_STR}"
+  bootctl status --no-pager 2>/dev/null | grep --color "Secure Boot" || true
   confirm "Did you reset and disable Secure Boot"
 
   # Test Internet connection
