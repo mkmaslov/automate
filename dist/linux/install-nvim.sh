@@ -46,7 +46,7 @@ title() { cprint 1 "$BLUE" "${1}\n"; }
 # Display a message
 msg() { cprint 1 "$COLOR_OFF" "${1}\n"; }
 # Display a highlighted message
-highlight() { cprint 1 "$COLOR_OFF" "${1}\n"; }
+highlight() { cprint 1 "$WHITE" "${1}\n"; }
 # Display a status line
 status() { cprint 1 "$WHITE" "${1}"; }
 # Display code or terminal commands

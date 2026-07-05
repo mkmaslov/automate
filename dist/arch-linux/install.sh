@@ -55,7 +55,7 @@ title() { cprint 1 "$BLUE" "${1}\n"; }
 # Display a message
 msg() { cprint 1 "$COLOR_OFF" "${1}\n"; }
 # Display a highlighted message
-highlight() { cprint 1 "$COLOR_OFF" "${1}\n"; }
+highlight() { cprint 1 "$WHITE" "${1}\n"; }
 # Display a status line
 status() { cprint 1 "$WHITE" "${1}"; }
 # Display code or terminal commands
@@ -437,7 +437,7 @@ catch_wrong () {
 
 # Instructions for setting up Internet connection.
 HELP_INTERNET () {
-  title "\n<< INTERNET CONFIGURATION >>"
+  title "<< INTERNET CONFIGURATION >>\n"
   MSG_STR="Before proceeding with the installation, "
   MSG_STR+="please make sure you have a functional Internet connection.\n"
   MSG_STR+="You can either connect via an Ethernet cable or "
@@ -463,7 +463,7 @@ HELP_INTERNET () {
 
 # Instructions for resetting the Secure Boot.
 HELP_SECURE_BOOT () {
-  title "\n<< SECURE BOOT RESET >>"
+  title "<< SECURE BOOT RESET >>\n"
   highlight "Full Secure Boot reset is recommended before using this script."
   msg "To perform the reset:"
   msg "- Enter BIOS firmware (by pressing F1/F2/F10/Esc/Enter/Del at boot)"
@@ -475,7 +475,7 @@ HELP_SECURE_BOOT () {
 
 # Instructions for setting up the UEFI bootloader.
 HELP_UEFI () {
-  title "\n<< UEFI BOOTLOADER CONFIGURATION >>"
+  title "<< UEFI BOOTLOADER CONFIGURATION >>\n"
   MSG_STR="To boot into the newly installed Arch Linux, "
   MSG_STR+="its Unified Kernel Image should be added to the UEFI bootloader.\n"
   MSG_STR+="Installation script does this automatically. "
@@ -585,7 +585,7 @@ loadkeys us ; setfont ter-132b ; clear
 CACHE_FILE="/tmp/arch_install_temp"
 
 # Prompt the user for installation mode.
-title="<< WELCOME TO ARCH LINUX INSTALLATION >>"
+title="<< WELCOME TO ARCH LINUX INSTALLATION >>\n"
 subtitle="You can either initiate the full installation, "
 subtitle+="restart a previously unfinished installation from a certain step, "
 subtitle+="or view installation instructions. "
@@ -607,9 +607,9 @@ SCRIPT_MODE="${result}"
 
 # If selected - show instructions.
 case "${SCRIPT_MODE}" in
-  7) HELP_INTERNET && exit ;;
-  8) HELP_SECURE_BOOT && exit ;;
-  9) HELP_UEFI && exit ;;
+  7) clear && HELP_INTERNET && exit ;;
+  8) clear && HELP_SECURE_BOOT && exit ;;
+  9) clear && HELP_UEFI && exit ;;
 esac
 
 # If resuming after disk configuration, verify that installed filesystems
