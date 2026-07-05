@@ -25,6 +25,7 @@ RED=$'\033[1;31m'
 GREEN=$'\033[1;32m'
 YELLOW=$'\033[1;33m'
 BLUE=$'\033[1;34m'
+WHITE=$'\033[1;37m'
 COLOR_OFF=$'\033[0m'
 
 # Output text in a given color
@@ -46,6 +47,8 @@ title() { cprint 1 "$YELLOW" "${1}\n"; }
 msg() { cprint 1 "$BLUE" "${1}\n"; }
 # Display a status line
 status() { cprint 1 "$BLUE" "${1}"; }
+# Display code or terminal commands
+show_code() { cprint 1 "$WHITE" "->  ${1}\n"; }
 # Display a success message
 success() { cprint 1 "$GREEN" "${1}\n"; }
 # Display a failure message
