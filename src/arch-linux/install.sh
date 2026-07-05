@@ -193,10 +193,10 @@ loadkeys us ; setfont ter-132b
 CACHE_FILE="/tmp/arch-install.cache"
 
 # Prompt the user for installation mode
-title="<< WELCOME TO ARCH LINUX INSTALLATION >>\n"
+title="<< WELCOME TO ARCH LINUX INSTALLATION >>"
 subtitle="You can either initiate the full installation, "
 subtitle+="restart a previously unfinished installation from a certain step, "
-subtitle+="or view installation instructions.\n"
+subtitle+="or view installation instructions."
 options=("Begin full installation (default)" \
   "Continue with disk configuration" \
   "Continue with package installation" \
@@ -231,13 +231,13 @@ if [ "$SCRIPT_MODE" -le 0 ]; then
   [ -f "${CACHE_FILE}" ] && rm "${CACHE_FILE}"
 
   # Prompt the user to choose a dual-boot mode
-  title="Arch Linux only or dual-boot?\n"
+  title="Arch Linux only or dual-boot?"
   subtitle="You can use Arch Linux as the only OS. "
   subtitle+="In this case, it will span the entire hard drive.\n"
   subtitle+="Alternatively, you can install Arch Linux alongside "
   subtitle+="an existing Windows installation.\n"
   subtitle+="In that case, Arch Linux will span the remaining "
-  subtitle+="space on the hard drive.\n"
+  subtitle+="space on the hard drive."
   options=("Arch Linux only (default)" "Dual-boot with Windows")
   single_choice result options "$title" "$subtitle"
   DUAL_BOOT_MODE="${result}"

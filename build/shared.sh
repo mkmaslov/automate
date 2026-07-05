@@ -124,8 +124,8 @@ single_choice() {
   fi
 
   # Print out title, subtitle and instructions
-  [[ -n "${TITLE}" ]] && title "$TITLE"
-  [[ -n "${SUBTITLE}" ]] && highlight "$SUBTITLE"
+  [[ -n "${TITLE}" ]] && title "$TITLE\n"
+  [[ -n "${SUBTITLE}" ]] && highlight "$SUBTITLE\n"
   printf '%s\n' "[ Navigate (Up/Down) | Confirm (Enter) ]"
 
   # Print the upper table border
@@ -156,7 +156,7 @@ single_choice() {
 
   # Determine current screen position for overwriting the options
   local LAST_ROW=$(get_cursor_row)
-  local START_ROW=$(($LAST_ROW - ${#OPTIONS_LIST[@]} - 1))
+  local START_ROW=$(($LAST_ROW - ${#OPTIONS_LIST[@]} - 2))
 
   # Ensure cursor and input echoing back on upon a ctrl+c during read -s
   single_choice_cleanup() {
