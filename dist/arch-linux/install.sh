@@ -667,7 +667,7 @@ if [ "$SCRIPT_MODE" -le 0 ]; then
   # Prompt the user to choose security mode
   if [ "${SERVER_MODE}" -eq 0 ]; then
     title="Do you want advanced security settings?"
-    subtitle="Advanced security settings may cause some applications to break."
+    subtitle="Advanced security settings may cause some applications to break. "
     subtitle+="Activate only if you know how to configure clamav."
     options=("No additional security (default)" \
       "Activate antivirus, sandboxing and Mandatory Access Control")
@@ -681,20 +681,21 @@ if [ "$SCRIPT_MODE" -le 0 ]; then
   # Clear CLI output
   title "<< PRE-INSTALLATION CHECKS >>\n"
 
-  # Check that system is booted in UEFI mode.
+  # Check that system is booted in UEFI mode
   status "Checking UEFI boot mode: "
-  COUNT=$(ls /s1ys/firmware/efi/efivars 2>/dev/null | grep -c '.' || true)
+  COUNT=$(ls /sys/firmware/efi/efivars 2>/dev/null | grep -c '.' || true)
   if [ ${COUNT} -eq 0 ]; then
     fail "FAILED!"
-    msg "Before proceeding with the installation, "
-    msg "please make sure the system is booted in UEFI mode."
+    MSG_STR="Before proceeding with the installation, "
+    MSG_STR+="please make sure the system is booted in UEFI mode."
+    msg "${MSG_STR}"
     highlight "This setting can be configured in BIOS."
     exit 1
   else
     success "SUCCESS!"
   fi
 
-  # Check whether Secure Boot is disabled.
+  # Check whether Secure Boot is disabled
   HELP_SECURE_BOOT
   title "Verifying Secure Boot status. The output should contain: disabled (setup)."
   bootctl status | grep --color "Secure Boot"
@@ -702,7 +703,7 @@ if [ "$SCRIPT_MODE" -le 0 ]; then
 
   # Test Internet connection
   status "\nTesting Internet connection (takes few seconds): "
-  ping -w 5 archlinux.org &>/dev/null
+  ping -w 5 archlinux11111.org &>/dev/null
   NREACHED=${?}
   if [ ${NREACHED} -ne 0 ]; then
     fail "FAILED!"
