@@ -190,6 +190,7 @@ loadkeys us ; setfont ter-132b ; clear
 
 # Save all output into a log file
 LOG_FILE="/tmp/arch-install.log"
+exec 3>&1
 exec > >(tee -a "$LOG_FILE") 2>&1
 
 # Create a temporary file for keeping script variables
@@ -210,7 +211,7 @@ options=("Begin full installation (default)" \
   "Show instructions for establishing/testing Internet connection" \
   "Show instructions for resetting Secure Boot" \
   "Show instructions for configuring UEFI bootloader")
-single_choice result options "$title" "$subtitle"
+single_choice result options "$title" "$subtitle" 3
 SCRIPT_MODE="${result}"
 
 # If selected - unmount drives
@@ -246,7 +247,7 @@ if [ "$SCRIPT_MODE" -le 0 ]; then
   subtitle+="an existing Windows installation. In this case, "
   subtitle+="Arch Linux will span the entire remaining space on the hard drive."
   options=("Arch Linux only (default)" "Dual-boot with Windows")
-  single_choice result options "$title" "$subtitle"
+  single_choice result options "$title" "$subtitle" 3
   DUAL_BOOT_MODE="${result}"
   echo "DUAL_BOOT_MODE=${DUAL_BOOT_MODE}" >> ${CACHE_FILE}
 
@@ -258,7 +259,7 @@ if [ "$SCRIPT_MODE" -le 0 ]; then
     subtitle+="Server installation enables remote disk decryption, "
     subtitle+="networking and containerization tools. "
     options=("Personal computer (default)" "Server")
-    single_choice result options "$title" "$subtitle"
+    single_choice result options "$title" "$subtitle" 3
     SERVER_MODE="${result}"
   else
     SERVER_MODE="0"
@@ -272,7 +273,7 @@ if [ "$SCRIPT_MODE" -le 0 ]; then
     subtitle+="additional drivers and enable additional kernel settings."
     options=("Integrated Intel/AMD GPU only (default)" \
       "Discrete NVIDIA GPU" "Discrete AMD GPU")
-    single_choice result options "$title" "$subtitle"
+    single_choice result options "$title" "$subtitle" 3
     GPU_MODE="${result}"
   else
     GPU_MODE="0"
@@ -286,7 +287,7 @@ if [ "$SCRIPT_MODE" -le 0 ]; then
     subtitle+="Activate only if you know how to configure clamav."
     options=("No additional security (default)" \
       "Activate antivirus, sandboxing and Mandatory Access Control")
-    single_choice result options "$title" "$subtitle"
+    single_choice result options "$title" "$subtitle" 3
     SECURITY_MODE="${result}"
   else
     SECURITY_MODE="1"
@@ -360,7 +361,7 @@ if [ "$SCRIPT_MODE" -le 1 ]; then
     model = substr($0, index($0, $4),20); print "/dev/" $1, $3, $2, model}')
     mapfile -t options < <(printf '%s\n' "$raw" | column -t  -s "|" -o " | ")
     # Display options and wait for user response.
-    single_choice result options "${title}" "${subtitle}"
+    single_choice result options "${title}" "${subtitle}" 3
     DISK="${options[$result]%% *}"
     echo "DISK=${DISK}" >> ${CACHE_FILE}
     # Partition the target drive.

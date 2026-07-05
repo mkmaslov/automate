@@ -93,9 +93,10 @@ confirm_or_exit() {
 # Prompt user to choose a single option out of a list
 # Adapted from: https://unix.stackexchange.com/a/415155
 single_choice() {
-    
+  local TTY_FD="${5:-1}"
+
   # Validate that the terminal is interactive
-  if ! [[ -t 0 && -t 1 ]]; then
+  if ! [[ -t 0 && -t "$TTY_FD" ]]; then
     error "${FUNCNAME[0]} requires an interactive terminal"
     return 1
   fi
@@ -117,9 +118,9 @@ single_choice() {
   fi
 
   # Print out title, subtitle and instructions
-  [[ -n "${TITLE}" ]] && title "$TITLE"
-  [[ -n "${SUBTITLE}" ]] && highlight "$SUBTITLE"
-  printf '%s\n' "[ Navigate (Up/Down) | Confirm (Enter) ]"
+  [[ -n "${TITLE}" ]] && title "$TTY_FD" "$BLUE" "${TITLE}\n"
+  [[ -n "${SUBTITLE}" ]] && highlight "$TTY_FD" "$WHITE" "${SUBTITLE}\n"
+  printf '%s\n' "[ Navigate (Up/Down) | Confirm (Enter) ]" >&"$TTY_FD"
 
   # Print the upper table border
   local MAX_LEN HR ESC OPTION
@@ -127,25 +128,25 @@ single_choice() {
   MAX_LEN=$(printf '%s\n' "${OPTIONS_LIST[@]}" |
     awk '{ if (length > max) max = length } END { print max }')
   printf -v HR '%*s'  "$((MAX_LEN+7))" '' && HR=${HR// /—}
-  printf '%s\n' "$HR"
+  printf '%s\n' "$HR" >&"$TTY_FD"
 
   # Helper functions for terminal print control and key input
   ESC=$'\033'
-  cursor_blink_on()  { printf "$ESC[?25h"; }
-  cursor_blink_off() { printf "$ESC[?25l"; }
-  cursor_to()        { printf "$ESC[$1;${2:-1}H"; }
-  print_option()   { printf '[ ]   %s ' "$1"; }
-  print_selected() { printf '[+]  %s[7m %s %s[27m' "$ESC" "$1" "$ESC"; }
-  get_cursor_row()   { IFS=';' read -sdR -p $'\E[6n' ROW COL; echo ${ROW#*[}; }
+  cursor_blink_on()  { printf "$ESC[?25h" >&"$TTY_FD"; }
+  cursor_blink_off() { printf "$ESC[?25l" >&"$TTY_FD"; }
+  cursor_to()        { printf "$ESC[$1;${2:-1}H" >&"$TTY_FD"; }
+  print_option()   { printf '[ ]   %s ' "$1" >&"$TTY_FD"; }
+  print_selected() { printf '[+]  %s[7m %s %s[27m' "$ESC" "$1" "$ESC" >&"$TTY_FD"; }
+  get_cursor_row()   { printf '\E[6n' >&"$TTY_FD"; IFS=';' read -sdR ROW COL; echo ${ROW#*[}; }
   key_input()        { read -s -n3 KEY 2>/dev/null >&2
                         if [[ $KEY = $ESC[A ]]; then echo up;    fi
                         if [[ $KEY = $ESC[B ]]; then echo down;  fi
                         if [[ $KEY = ""     ]]; then echo enter; fi; }
 
   # Initially print empty new lines (scroll down if at bottom of screen)
-  for OPTION in "${OPTIONS_LIST[@]}"; do printf "\n"; done
+  for OPTION in "${OPTIONS_LIST[@]}"; do printf "\n" >&"$TTY_FD"; done
   # Print the lower table border
-  printf '%s\n' "$HR"
+  printf '%s\n' "$HR" >&"$TTY_FD"
 
   # Determine current screen position for overwriting the options
   local LAST_ROW=$(get_cursor_row)

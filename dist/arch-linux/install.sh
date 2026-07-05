@@ -102,9 +102,10 @@ confirm_or_exit() {
 # Prompt user to choose a single option out of a list
 # Adapted from: https://unix.stackexchange.com/a/415155
 single_choice() {
-    
+  local TTY_FD="${5:-1}"
+
   # Validate that the terminal is interactive
-  if ! [[ -t 0 && -t 1 ]]; then
+  if ! [[ -t 0 && -t "$TTY_FD" ]]; then
     error "${FUNCNAME[0]} requires an interactive terminal"
     return 1
   fi
@@ -126,9 +127,9 @@ single_choice() {
   fi
 
   # Print out title, subtitle and instructions
-  [[ -n "${TITLE}" ]] && title "$TITLE"
-  [[ -n "${SUBTITLE}" ]] && highlight "$SUBTITLE"
-  printf '%s\n' "[ Navigate (Up/Down) | Confirm (Enter) ]"
+  [[ -n "${TITLE}" ]] && title "$TTY_FD" "$BLUE" "${TITLE}\n"
+  [[ -n "${SUBTITLE}" ]] && highlight "$TTY_FD" "$WHITE" "${SUBTITLE}\n"
+  printf '%s\n' "[ Navigate (Up/Down) | Confirm (Enter) ]" >&"$TTY_FD"
 
   # Print the upper table border
   local MAX_LEN HR ESC OPTION
@@ -136,25 +137,25 @@ single_choice() {
   MAX_LEN=$(printf '%s\n' "${OPTIONS_LIST[@]}" |
     awk '{ if (length > max) max = length } END { print max }')
   printf -v HR '%*s'  "$((MAX_LEN+7))" '' && HR=${HR// /—}
-  printf '%s\n' "$HR"
+  printf '%s\n' "$HR" >&"$TTY_FD"
 
   # Helper functions for terminal print control and key input
   ESC=$'\033'
-  cursor_blink_on()  { printf "$ESC[?25h"; }
-  cursor_blink_off() { printf "$ESC[?25l"; }
-  cursor_to()        { printf "$ESC[$1;${2:-1}H"; }
-  print_option()   { printf '[ ]   %s ' "$1"; }
-  print_selected() { printf '[+]  %s[7m %s %s[27m' "$ESC" "$1" "$ESC"; }
-  get_cursor_row()   { IFS=';' read -sdR -p $'\E[6n' ROW COL; echo ${ROW#*[}; }
+  cursor_blink_on()  { printf "$ESC[?25h" >&"$TTY_FD"; }
+  cursor_blink_off() { printf "$ESC[?25l" >&"$TTY_FD"; }
+  cursor_to()        { printf "$ESC[$1;${2:-1}H" >&"$TTY_FD"; }
+  print_option()   { printf '[ ]   %s ' "$1" >&"$TTY_FD"; }
+  print_selected() { printf '[+]  %s[7m %s %s[27m' "$ESC" "$1" "$ESC" >&"$TTY_FD"; }
+  get_cursor_row()   { printf '\E[6n' >&"$TTY_FD"; IFS=';' read -sdR ROW COL; echo ${ROW#*[}; }
   key_input()        { read -s -n3 KEY 2>/dev/null >&2
                         if [[ $KEY = $ESC[A ]]; then echo up;    fi
                         if [[ $KEY = $ESC[B ]]; then echo down;  fi
                         if [[ $KEY = ""     ]]; then echo enter; fi; }
 
   # Initially print empty new lines (scroll down if at bottom of screen)
-  for OPTION in "${OPTIONS_LIST[@]}"; do printf "\n"; done
+  for OPTION in "${OPTIONS_LIST[@]}"; do printf "\n" >&"$TTY_FD"; done
   # Print the lower table border
-  printf '%s\n' "$HR"
+  printf '%s\n' "$HR" >&"$TTY_FD"
 
   # Determine current screen position for overwriting the options
   local LAST_ROW=$(get_cursor_row)
@@ -583,6 +584,7 @@ loadkeys us ; setfont ter-132b ; clear
 
 # Save all output into a log file
 LOG_FILE="/tmp/arch-install.log"
+exec 3>&1
 exec > >(tee -a "$LOG_FILE") 2>&1
 
 # Create a temporary file for keeping script variables
@@ -603,7 +605,7 @@ options=("Begin full installation (default)" \
   "Show instructions for establishing/testing Internet connection" \
   "Show instructions for resetting Secure Boot" \
   "Show instructions for configuring UEFI bootloader")
-single_choice result options "$title" "$subtitle"
+single_choice result options "$title" "$subtitle" 3
 SCRIPT_MODE="${result}"
 
 # If selected - unmount drives
@@ -639,7 +641,7 @@ if [ "$SCRIPT_MODE" -le 0 ]; then
   subtitle+="an existing Windows installation. In this case, "
   subtitle+="Arch Linux will span the entire remaining space on the hard drive."
   options=("Arch Linux only (default)" "Dual-boot with Windows")
-  single_choice result options "$title" "$subtitle"
+  single_choice result options "$title" "$subtitle" 3
   DUAL_BOOT_MODE="${result}"
   echo "DUAL_BOOT_MODE=${DUAL_BOOT_MODE}" >> ${CACHE_FILE}
 
@@ -651,7 +653,7 @@ if [ "$SCRIPT_MODE" -le 0 ]; then
     subtitle+="Server installation enables remote disk decryption, "
     subtitle+="networking and containerization tools. "
     options=("Personal computer (default)" "Server")
-    single_choice result options "$title" "$subtitle"
+    single_choice result options "$title" "$subtitle" 3
     SERVER_MODE="${result}"
   else
     SERVER_MODE="0"
@@ -665,7 +667,7 @@ if [ "$SCRIPT_MODE" -le 0 ]; then
     subtitle+="additional drivers and enable additional kernel settings."
     options=("Integrated Intel/AMD GPU only (default)" \
       "Discrete NVIDIA GPU" "Discrete AMD GPU")
-    single_choice result options "$title" "$subtitle"
+    single_choice result options "$title" "$subtitle" 3
     GPU_MODE="${result}"
   else
     GPU_MODE="0"
@@ -679,7 +681,7 @@ if [ "$SCRIPT_MODE" -le 0 ]; then
     subtitle+="Activate only if you know how to configure clamav."
     options=("No additional security (default)" \
       "Activate antivirus, sandboxing and Mandatory Access Control")
-    single_choice result options "$title" "$subtitle"
+    single_choice result options "$title" "$subtitle" 3
     SECURITY_MODE="${result}"
   else
     SECURITY_MODE="1"
@@ -753,7 +755,7 @@ if [ "$SCRIPT_MODE" -le 1 ]; then
     model = substr($0, index($0, $4),20); print "/dev/" $1, $3, $2, model}')
     mapfile -t options < <(printf '%s\n' "$raw" | column -t  -s "|" -o " | ")
     # Display options and wait for user response.
-    single_choice result options "${title}" "${subtitle}"
+    single_choice result options "${title}" "${subtitle}" 3
     DISK="${options[$result]%% *}"
     echo "DISK=${DISK}" >> ${CACHE_FILE}
     # Partition the target drive.
