@@ -144,7 +144,7 @@ single_choice() {
   # Initially print empty new lines (scroll down if at bottom of screen)
   for OPTION in "${OPTIONS_LIST[@]}"; do printf "\n"; done
   # Print the lower table border
-  printf '%s\n' "$HR"
+  printf '%s\n\n' "$HR"
 
   # Determine current screen position for overwriting the options
   local LAST_ROW=$(get_cursor_row)

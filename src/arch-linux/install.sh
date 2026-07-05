@@ -187,7 +187,7 @@ enable_cleanup_trap () {
 # -----------------------------------------------------------------------------
 
 # Reset terminal window
-loadkeys us ; setfont ter-132b ; clear
+loadkeys us ; setfont ter-132b
 
 # Create a temporary file for keeping script variables
 CACHE_FILE="/tmp/arch-install.cache"
@@ -210,16 +210,15 @@ options=("Begin full installation (default)" \
 single_choice result options "$title" "$subtitle"
 SCRIPT_MODE="${result}"
 
-clear
 case "${SCRIPT_MODE}" in
   # Validate that filesystems are mounted and cash exists
-  2|3|4|5) clear ; validate_resume ;;
+  2|3|4|5) validate_resume ;;
   # Unmount drives
   6) unmount_drives ; exit ;;
   # Show instructions
-  7) clear ; HELP_INTERNET ; exit ;;
-  8) clear ; HELP_SECURE_BOOT ; exit ;;
-  9) clear ; HELP_UEFI ; exit ;;
+  7) HELP_INTERNET ; exit ;;
+  8) HELP_SECURE_BOOT ; exit ;;
+  9) HELP_UEFI ; exit ;;
 esac
 
 # -----------------------------------------------------------------------------
@@ -236,8 +235,9 @@ if [ "$SCRIPT_MODE" -le 0 ]; then
   subtitle="You can use Arch Linux as the only OS. "
   subtitle+="In this case, it will span the entire hard drive.\n"
   subtitle+="Alternatively, you can install Arch Linux alongside "
-  subtitle+="an existing Windows installation. In this case, "
-  subtitle+="Arch Linux will span the entire remaining space on the hard drive.\n"
+  subtitle+="an existing Windows installation.\n"
+  subtitle+="In that case, Arch Linux will span the remaining "
+  subtitle+="space on the hard drive.\n"
   options=("Arch Linux only (default)" "Dual-boot with Windows")
   single_choice result options "$title" "$subtitle"
   DUAL_BOOT_MODE="${result}"
@@ -292,7 +292,7 @@ if [ "$SCRIPT_MODE" -le 0 ]; then
 
 
   # Clear CLI output.
-  clear ; title "<< PRE-INSTALLATION CHECKS >>\n"
+  title "<< PRE-INSTALLATION CHECKS >>\n"
   # Check that system is booted in UEFI mode.
   status "Checking UEFI boot mode: "
   COUNT=$(ls /sys/firmware/efi/efivars | grep -c '.')
