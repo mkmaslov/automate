@@ -127,7 +127,7 @@ single_choice() {
 
   # Print out title, subtitle and instructions
   [[ -n "${TITLE}" ]] && title "$TITLE"
-  [[ -n "${SUBTITLE}" ]] && msg "$SUBTITLE"
+  [[ -n "${SUBTITLE}" ]] && highlight "$SUBTITLE"
   printf '%s\n' "[ Navigate (Up/Down) | Confirm (Enter) ]"
 
   # Print the upper table border
@@ -441,7 +441,7 @@ HELP_INTERNET () {
   MSG_STR="Before proceeding with the installation, "
   MSG_STR+="please make sure you have a functional Internet connection.\n"
   MSG_STR+="You can either connect via an Ethernet cable or "
-  MSG_STR+="establish a wireless connection."
+  MSG_STR+="establish a wireless connection.\n"
   highlight "${MSG_STR}"
   msg "To list all network interfaces, run:"
   show_code "ip link show"
@@ -464,7 +464,7 @@ HELP_INTERNET () {
 # Instructions for resetting the Secure Boot.
 HELP_SECURE_BOOT () {
   title "<< SECURE BOOT RESET >>\n"
-  highlight "Full Secure Boot reset is recommended before using this script."
+  highlight "Full Secure Boot reset is recommended before using this script.\n"
   msg "To perform the reset:"
   msg "- Enter BIOS firmware (by pressing F1/F2/F10/Esc/Enter/Del at boot)"
   msg "- Navigate to the \"Security\" settings tab"
@@ -479,7 +479,7 @@ HELP_UEFI () {
   MSG_STR="To boot into the newly installed Arch Linux, "
   MSG_STR+="its Unified Kernel Image should be added to the UEFI bootloader.\n"
   MSG_STR+="Installation script does this automatically. "
-  MSG_STR+="But you might want to set up the boot order manually."
+  MSG_STR+="But you might want to set up the boot order manually.\n"
   highlight "${MSG_STR}"
   msg "To list current UEFI boot options, run:"
   show_code "efibootmgr"
@@ -503,11 +503,11 @@ require_resume_state () {
   local rc=0
   load_cache
   if ! cryptsetup status lvm >/dev/null 2>&1; then
-    error "LUKS container is not open: lvm"
+    error "LUKS container (lvm) is not open!"
     rc=1
   fi
   if ! vgs main >/dev/null 2>&1; then
-    error "LVM volume group is not active: main"
+    error "LVM volume group (main) is not active"
     rc=1
   fi
   if ! swapon --show=NAME --noheadings | grep -Fxq "${SWAP:-/dev/mapper/main-swap}"; then
@@ -588,7 +588,7 @@ CACHE_FILE="/tmp/arch_install_temp"
 title="<< WELCOME TO ARCH LINUX INSTALLATION >>\n"
 subtitle="You can either initiate the full installation, "
 subtitle+="restart a previously unfinished installation from a certain step, "
-subtitle+="or view installation instructions. "
+subtitle+="or view installation instructions.\n"
 options=("Begin full installation (default)" \
   "Continue with disk configuration" \
   "Continue with package installation" \
@@ -618,6 +618,9 @@ if [ "$SCRIPT_MODE" -ge 2 ] && [ "$SCRIPT_MODE" -le 5 ]; then
   require_resume_state
 fi
 
+success "good"
+exit 0
+error "bad"
 
 # -----------------------------------------------------------------------------
 # Initial checks.

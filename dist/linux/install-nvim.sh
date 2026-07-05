@@ -118,7 +118,7 @@ single_choice() {
 
   # Print out title, subtitle and instructions
   [[ -n "${TITLE}" ]] && title "$TITLE"
-  [[ -n "${SUBTITLE}" ]] && msg "$SUBTITLE"
+  [[ -n "${SUBTITLE}" ]] && highlight "$SUBTITLE"
   printf '%s\n' "[ Navigate (Up/Down) | Confirm (Enter) ]"
 
   # Print the upper table border
