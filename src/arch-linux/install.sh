@@ -133,10 +133,16 @@ cleanup_mounts () {
   if mountpoint -q /mnt/efi; then
     umount /mnt/efi || rc=1
   fi
-  # Switch off swap
-  if swapon --show=NAME --noheadings | grep -Fxq "${SWAP:-/dev/mapper/main-swap}"; then
-    swapoff "${SWAP:-/dev/mapper/main-swap}" || rc=1
-  fi
+  # Switch off swap (swapon may report /dev/dm-* instead of /dev/mapper/*)
+  local swap="/dev/mapper/main-swap"
+  local active_swap swap_dev
+  swap_dev="$(stat -Lc '%t:%T' "$swap" 2>/dev/null || true)"
+  for active_swap in $(swapon --show=NAME --noheadings); do
+    if [ -n "$swap_dev" ] && [ "$(stat -Lc '%t:%T' "$active_swap" 2>/dev/null || true)" = "$swap_dev" ]; then
+      swapoff "$swap" || rc=1
+      break
+    fi
+  done
   # Unmount root partition
   if mountpoint -q /mnt; then
     umount /mnt || rc=1
@@ -381,15 +387,13 @@ if [ "$SCRIPT_MODE" -le 1 ]; then
   # Notify kernel about filesystem changes and fetch partition labels
   highlight "Updating information about disk partitions, please wait."
   sleep 5 ; partprobe ${DISK} ; sleep 5
-  #EFI="/dev/$(lsblk ${DISK} -o NAME,PARTLABEL | grep LINEFI | cut -d " " -f1 | cut -c7-)"
   EFI="$(lsblk -nrpo NAME,PARTLABEL "${DISK}" | awk '$2 == "LINEFI" { print $1; exit }')"
-  #LVM="/dev/$(lsblk ${DISK} -o NAME,PARTLABEL | grep LVM | cut -d " " -f1 | cut -c7-)"
   LVM="$(lsblk -nrpo NAME,PARTLABEL "${DISK}" | awk '$2 == "LVM" { print $1; exit }')"
   echo "EFI=${EFI}" >> ${CACHE_FILE}
   echo "LVM=${LVM}" >> ${CACHE_FILE}
 
   # Set up LUKS encryption for the LVM partition
-  MSG_STR="\nSetting up a LUKS-encrypted container on the LVM partition. "
+  MSG_STR="Setting up a LUKS-encrypted container on the LVM partition. "
   MSG_STR+="You will be prompted for a password."
   highlight "${MSG_STR}"
   modprobe dm-crypt
