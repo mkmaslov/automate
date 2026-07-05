@@ -300,7 +300,9 @@ enforce_cmds() {
 # Retry command until it succeeds
 retry_cmd () {
   until "$@"; do
-    warning "command failed with status $?. Retrying..."
+    local status=$?
+    [ "$status" -eq 130 ] && return "$status"
+    warning "command failed with status ${status}. Retrying..."
   done
 }
 
