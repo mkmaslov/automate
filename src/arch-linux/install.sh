@@ -329,17 +329,13 @@ if [ "$SCRIPT_MODE" -le 0 ]; then
 
 fi
 
-success "good"
-exit 0
-error "bad"
-
 # -----------------------------------------------------------------------------
 # Disk configuration
 # -----------------------------------------------------------------------------
 
 if [ "$SCRIPT_MODE" -le 1 ]; then
 
-  load_cache ; title "<< DISK CONFIGURATION >>\n"
+  load_cache ; title "\n<< DISK CONFIGURATION >>\n"
 
   # Choose the target drive
   title="Choose a target drive for the installation:"
@@ -438,6 +434,10 @@ if [ "$SCRIPT_MODE" -le 1 ]; then
   confirm "Do you want to proceed with the installation"
 
 fi
+
+success "good"
+exit 0
+error "bad"
 
 
 # -----------------------------------------------------------------------------
