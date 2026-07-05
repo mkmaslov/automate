@@ -189,9 +189,10 @@ loadkeys us ; setfont ter-132b ; clear
 CACHE_FILE="/tmp/arch_install_temp"
 
 # Prompt the user for installation mode.
-title="<< WELCOME TO ARCH LINUX INSTALLATION >>\n"
-subtitle="You can either initiate the full installation, restart \
-  a previously unfinished installation from a certain step, or view installation instructions. "
+title="<< WELCOME TO ARCH LINUX INSTALLATION >>"
+subtitle="You can either initiate the full installation, "
+subtitle+="restart a previously unfinished installation from a certain step, "
+subtitle+="or view installation instructions. "
 options=("Begin full installation (default)" \
   "Continue with disk configuration" \
   "Continue with package installation" \

@@ -51,11 +51,11 @@ cprint() {
 }
 
 # Display a title
-title() { cprint 1 "$YELLOW" "${1}\n"; }
+title() { cprint 1 "$BLUE" "${1}\n"; }
 # Display a message
-msg() { cprint 1 "$BLUE" "${1}\n"; }
+msg() { cprint 1 "$WHITE" "${1}\n"; }
 # Display a status line
-status() { cprint 1 "$BLUE" "${1}"; }
+status() { cprint 1 "$WHITE" "${1}"; }
 # Display code or terminal commands
 show_code() { cprint 1 "$WHITE" "->  ${1}\n"; }
 # Display a success message
@@ -64,6 +64,8 @@ success() { cprint 1 "$GREEN" "${1}\n"; }
 fail() { cprint 2 "$RED" "${1}\n"; }
 # Display an error message
 error() { cprint 2 "$RED" "ERROR: ${1}\n"; }
+# Display a warning message
+warning() { cprint 1 "$YELLOW" "WARNING: ${1}\n"; }
 # Display an error, if function argument is not provided
 bad_arg() { error "$1 called without argument: $2"; return 1; }
 
@@ -578,9 +580,10 @@ loadkeys us ; setfont ter-132b ; clear
 CACHE_FILE="/tmp/arch_install_temp"
 
 # Prompt the user for installation mode.
-title="<< WELCOME TO ARCH LINUX INSTALLATION >>\n"
-subtitle="You can either initiate the full installation, restart \
-  a previously unfinished installation from a certain step, or view installation instructions. "
+title="<< WELCOME TO ARCH LINUX INSTALLATION >>"
+subtitle="You can either initiate the full installation, "
+subtitle+="restart a previously unfinished installation from a certain step, "
+subtitle+="or view installation instructions. "
 options=("Begin full installation (default)" \
   "Continue with disk configuration" \
   "Continue with package installation" \
