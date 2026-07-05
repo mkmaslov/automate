@@ -428,7 +428,7 @@ get_next_free_partition_number() {
 confirm() {
   ask RESPONSE "${1} [Y/n]?"
   if [[ ${RESPONSE,,} =~ ^(n|no)$ ]]; then
-    [ -n "${2:-}" ] && "$2"
+    [ -n "${2:-}" ] && "$2" || printf "\n"
     fail "Cancelling installation!"
     unmount_drives
     exit
@@ -756,7 +756,7 @@ if [ "$SCRIPT_MODE" -le 1 ]; then
       # Arch Linux requires 2 partitions: an EFI partition and an LVM pool.
       # Second EFI partition is recommended to prevent Windows Update
       # from messing up Arch Linux boot images.
-      MSG_STR="Proceeding will add two partitions to ${DISK} "
+      MSG_STR="Proceeding will add two partitions to ${RED}${DISK}${BLUE} "
       MSG_STR+="without touching Windows partitions. Do you agree"
       confirm "${MSG_STR}"
       sgdisk ${DISK} \
@@ -764,8 +764,8 @@ if [ "$SCRIPT_MODE" -le 1 ]; then
         -n 6:0:0 -t 6:8e00 -c 6:LVM &>/dev/null
     fi
   else
-    MSG_STR="Proceeding will erase all data on"
-    MSG_STR+="${RED} ${DISK}${BLUE}. Do you agree [Y/n]?"
+    MSG_STR="Proceeding will erase all data on "
+    MSG_STR+="${RED}${DISK}${BLUE}. Do you agree"
     confirm "${MSG_STR}"
     wipefs -af ${DISK} &>/dev/null
     sgdisk ${DISK} -Zo -I \
