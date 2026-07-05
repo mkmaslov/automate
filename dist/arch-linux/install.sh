@@ -585,7 +585,7 @@ loadkeys us ; setfont ter-132b
 CACHE_FILE="/tmp/arch-install.cache"
 
 # Prompt the user for installation mode
-title="<< WELCOME TO ARCH LINUX INSTALLATION >>"
+title="\n<< WELCOME TO ARCH LINUX INSTALLATION >>"
 subtitle="You can either initiate the full installation, "
 subtitle+="restart a previously unfinished installation from a certain step, "
 subtitle+="or view installation instructions."
@@ -678,16 +678,11 @@ if [ "$SCRIPT_MODE" -le 0 ]; then
   fi
   echo "SECURITY_MODE=${SECURITY_MODE}" >> ${CACHE_FILE}
 
-  success "good"
-  exit 0
-  error "bad"
-
-
   # Clear CLI output.
   title "<< PRE-INSTALLATION CHECKS >>\n"
   # Check that system is booted in UEFI mode.
   status "Checking UEFI boot mode: "
-  COUNT=$(ls /sys/firmware/efi/efivars | grep -c '.')
+  COUNT=$(ls /s1ys/firmware/efi/efivars | grep -c '.')
   if [ ${COUNT} -eq 0 ]; then
     error  "FAILED!"
     msg "Before proceeding with the installation, "
@@ -729,6 +724,9 @@ if [ "$SCRIPT_MODE" -le 0 ]; then
 
 fi
 
+success "good"
+exit 0
+error "bad"
 
 # -----------------------------------------------------------------------------
 # Disk configuration.
