@@ -247,7 +247,7 @@ if [ "$SCRIPT_MODE" -le 0 ]; then
   if [ "${DUAL_BOOT_MODE}" -eq 0 ]; then
     title="Personal computer or server?"
     subtitle="Installation for a personal computer includes "
-    subtitle+="a graphical interface and user-space applications. "
+    subtitle+="a graphical interface and user-space applications.\n"
     subtitle+="Server installation enables remote disk decryption, "
     subtitle+="networking and containerization tools. "
     options=("Personal computer (default)" "Server")
@@ -286,38 +286,42 @@ if [ "$SCRIPT_MODE" -le 0 ]; then
   fi
   echo "SECURITY_MODE=${SECURITY_MODE}" >> ${CACHE_FILE}
 
-  # Clear CLI output.
+  # Clear CLI output
   title "<< PRE-INSTALLATION CHECKS >>\n"
+
   # Check that system is booted in UEFI mode.
   status "Checking UEFI boot mode: "
-  COUNT=$(ls /s1ys/firmware/efi/efivars | grep -c '.')
+  COUNT=$(ls /s1ys/firmware/efi/efivars 2>/dev/null | grep -c '.' || true)
   if [ ${COUNT} -eq 0 ]; then
-    error  "FAILED!"
+    fail "FAILED!"
     msg "Before proceeding with the installation, "
     msg "please make sure the system is booted in UEFI mode."
-    title    "This setting can be configured in BIOS."
-    exit
+    highlight "This setting can be configured in BIOS."
+    exit 1
   else
-    success "SUCCESS!\n"
+    success "SUCCESS!"
   fi
+
   # Check whether Secure Boot is disabled.
   HELP_SECURE_BOOT
   title "Verifying Secure Boot status. The output should contain: disabled (setup)."
   bootctl status | grep --color "Secure Boot"
   confirm "Did you reset and disable Secure Boot"
-  # Test Internet connection.
+
+  # Test Internet connection
   status "\nTesting Internet connection (takes few seconds): "
   ping -w 5 archlinux.org &>/dev/null
   NREACHED=${?}
   if [ ${NREACHED} -ne 0 ]; then
-    error  "FAILED!"
+    fail "FAILED!"
     HELP_INTERNET
-    exit
+    exit 1
   else
-    success "SUCCESS!\n"
+    success "SUCCESS!"
     timedatectl set-ntp true
   fi
-  # Check system clock synchronization.
+
+  # Check system clock synchronization
   title "Checking time synchronization:"
   timedatectl status | grep -E 'Local time|synchronized'
   confirm "Is system time correct and synchronized"
