@@ -61,7 +61,7 @@ status() { cprint 1 "$WHITE" "${1}"; }
 # Display code or terminal commands
 show_code() { cprint 1 "$WHITE" "->  ${1}\n"; }
 # Display a success message
-success() { cprint 1 "$GREEN" "OK: ${1}\n"; }
+success() { cprint 1 "$GREEN" "${1}\n"; }
 # Display a failure message
 fail() { cprint 2 "$RED" "${1}\n"; }
 # Display an error message
@@ -306,6 +306,13 @@ enforce_cmds() {
   done
 }
 
+# Retry command until it succeeds
+retry_cmd () {
+  until "$@"; do
+    warning "command failed with status $?. Retrying..."
+  done
+}
+
 #------------------------------------------------------------------------------
 # File editing
 #------------------------------------------------------------------------------
@@ -422,23 +429,15 @@ confirm() {
   ask RESPONSE "${1} [Y/n]?"
   if [[ ${RESPONSE,,} =~ ^(n|no)$ ]]; then
     [ -n "${2:-}" ] && "$2"
-    fail "\nCancelling installation!"
+    fail "Cancelling installation!"
     unmount_drives
     exit
   fi
 }
 
-# Retry running a command, if it fails the first time, e.g., wrong password.
-catch_wrong () {
-  while true; do
-    set +e ; "$@" ; status=$? ; set -e
-    [ $status -eq 0 ] && break || error "command failed! Retrying..."
-  done
-}
-
 # Instructions for setting up Internet connection
 HELP_INTERNET () {
-  MSG_STR="Before proceeding with the installation, "
+  MSG_STR="\nBefore proceeding with the installation, "
   MSG_STR+="please make sure you have a functional Internet connection.\n"
   MSG_STR+="You can either connect via an Ethernet cable or "
   MSG_STR+="establish a wireless connection.\n"
@@ -463,7 +462,7 @@ HELP_INTERNET () {
 
 # Instructions for resetting the Secure Boot
 HELP_SECURE_BOOT () {
-  highlight "Full Secure Boot reset is recommended before using this script.\n"
+  highlight "\nFull Secure Boot reset is recommended before using this script.\n"
   msg "To perform the reset:"
   msg "- Enter BIOS firmware (by pressing F1/F2/F10/Esc/Enter/Del at boot)"
   msg "- Navigate to the \"Security\" settings tab"
@@ -497,7 +496,7 @@ load_cache () {
   source "${CACHE_FILE}"
 }
 
-# Verify that a paused installation can be resumed from the selected step.
+# Verify that a paused installation can be resumed from the selected step
 validate_resume () {
   local rc=0
   load_cache
@@ -608,8 +607,8 @@ case "${SCRIPT_MODE}" in
   # Unmount drives
   6) unmount_drives ; exit ;;
   # Show instructions
-  7) title "<< INTERNET CONFIGURATION >>\n" ; HELP_INTERNET ; exit ;;
-  8) title "<< SECURE BOOT RESET >>\n" ; HELP_SECURE_BOOT ; exit ;;
+  7) title "<< INTERNET CONFIGURATION >>" ; HELP_INTERNET ; exit ;;
+  8) title "<< SECURE BOOT RESET >>" ; HELP_SECURE_BOOT ; exit ;;
   9) HELP_UEFI ; exit ;;
 esac
 
@@ -704,7 +703,7 @@ if [ "$SCRIPT_MODE" -le 0 ]; then
 
   # Test Internet connection
   status "\nTesting Internet connection (takes few seconds): "
-  if ping -w 5 archlinux11111.org &>/dev/null; then
+  if ping -w 5 archlinux.org &>/dev/null; then
     success "SUCCESS!"
     timedatectl set-ntp true
   else
@@ -717,7 +716,8 @@ if [ "$SCRIPT_MODE" -le 0 ]; then
   title "Checking time synchronization:"
   timedatectl status | grep -E 'Local time|synchronized'
   confirm "Is system time correct and synchronized"
-  # Detect CPU vendor.
+  
+  # Detect CPU vendor
   CPU=$(grep vendor_id /proc/cpuinfo)
   if [[ ${CPU} == *"AuthenticAMD"* ]]; then
     MICROCODE=amd-ucode
@@ -733,101 +733,108 @@ exit 0
 error "bad"
 
 # -----------------------------------------------------------------------------
-# Disk configuration.
+# Disk configuration
 # -----------------------------------------------------------------------------
 
 if [ "$SCRIPT_MODE" -le 1 ]; then
-  # Clear CLI output
-  load_cache ; clear ; title "<< DISK CONFIGURATION >>\n"
+
+  load_cache ; title "<< DISK CONFIGURATION >>\n"
+
   # Choose the target drive
   title="Choose a target drive for the installation:"
   subtitle="(entire block device, not a partition)"
-  # Obtain information about disk drives.
+  # Obtain information about disk drives
   raw=$(lsblk -dno NAME,SIZE,TRAN,MODEL | awk -v OFS='|' '{
     model = substr($0, index($0, $4),20); print "/dev/" $1, $3, $2, model}')
-    mapfile -t options < <(printf '%s\n' "$raw" | column -t  -s "|" -o " | ")
-    # Display options and wait for user response.
-    single_choice result options "${title}" "${subtitle}"
-    DISK="${options[$result]%% *}"
-    echo "DISK=${DISK}" >> ${CACHE_FILE}
-    # Partition the target drive.
-    if [ "${DUAL_BOOT_MODE}" -eq 1 ]; then
-      NPART=$(sgdisk -p "${DISK}" | grep -E '^\s+[0-9]+' | wc -l)
-      if [ "${NPART}" -eq 4 ]; then
-        # Windows creates 4 partitions, including an EFI boot partition.
-        # Arch Linux requires two partitions: an EFI partition and an LVM pool.
-        # Second EFI partition is recommended to prevent Windows Update
-        # from messing up Arch Linux boot images.
-        MSG_STR="Proceeding will add two partitions to ${DISK} "\
-          MSG_STR+="without touching Windows partitions. Do you agree"
-        confirm "${MSG_STR}"
-        sgdisk ${DISK} \
-          -n 5:0:+4096M -t 5:ef00 -c 5:LINEFI \
-          -n 6:0:0 -t 6:8e00 -c 6:LVM &>/dev/null
-      fi
-    else
-      confirm "Proceeding will erase all data on ${DISK}. Do you agree"
-      wipefs -af ${DISK} &>/dev/null
-      sgdisk ${DISK} -Zo -I \
-        -n 1:0:4096M -t 1:ef00 -c 1:LINEFI \
-        -n 2:0:0 -t 2:8e00 -c 2:LVM &>/dev/null
+  mapfile -t options < <(printf '%s\n' "$raw" | column -t  -s "|" -o " | ")
+  # Display options and wait for user response
+  single_choice result options "${title}" "${subtitle}"
+  DISK="${options[$result]%% *}"
+  echo "DISK=${DISK}" >> ${CACHE_FILE}
+  
+  # Partition the target drive
+  if [ "${DUAL_BOOT_MODE}" -eq 1 ]; then
+    NPART=$(sgdisk -p "${DISK}" | grep -E '^\s+[0-9]+' | wc -l)
+    if [ "${NPART}" -eq 4 ]; then
+      # Windows creates 4 partitions, including an EFI boot partition.
+      # Arch Linux requires 2 partitions: an EFI partition and an LVM pool.
+      # Second EFI partition is recommended to prevent Windows Update
+      # from messing up Arch Linux boot images.
+      MSG_STR="Proceeding will add two partitions to ${DISK} "
+      MSG_STR+="without touching Windows partitions. Do you agree"
+      confirm "${MSG_STR}"
+      sgdisk ${DISK} \
+        -n 5:0:+4096M -t 5:ef00 -c 5:LINEFI \
+        -n 6:0:0 -t 6:8e00 -c 6:LVM &>/dev/null
     fi
-    title "\nCurrent partition table:" && sgdisk -p ${DISK}
-    confirm "Do you want to proceed with the installation"
-    # Clear CLI output.
-    clear ; title "<< FULL-DISK ENCRYPTION >>\n"
-    # Notify kernel about filesystem changes and fetch partition labels.
-    title "Updating information about disk partitions, please wait."
-    sleep 5 ; partprobe ${DISK} ; sleep 5
-    EFI="/dev/$(lsblk ${DISK} -o NAME,PARTLABEL | grep LINEFI | cut -d " " -f1 | cut -c7-)"
-    LVM="/dev/$(lsblk ${DISK} -o NAME,PARTLABEL | grep LVM | cut -d " " -f1 | cut -c7-)"
-    echo "EFI=${EFI}" >> ${CACHE_FILE}
-    echo "LVM=${LVM}" >> ${CACHE_FILE}
-    # Set up LUKS encryption for the LVM partition.
-    MSG_STR="\nSetting up a LUKS-encrypted container on the LVM partition. "
-    MSG_STR+="You will be prompted for a password."
-    title "${MSG_STR}"
-    modprobe dm-crypt
-    catch_wrong cryptsetup luksFormat --cipher=aes-xts-plain64 \
-      --key-size=512 --verify-passphrase ${LVM}
-    MSG_STR="\nOpening the newly created LUKS container. "
-    MSG_STR+="Please, re-enter the chosen password."
-    title "${MSG_STR}"
-    catch_wrong cryptsetup open --type luks ${LVM} lvm
-    MAP_LVM="/dev/mapper/lvm"
-    echo "MAP_LVM=${MAP_LVM}" >> ${CACHE_FILE}
-    enable_cleanup_trap
-    # Create LVM volumes, format and mount partitions.
-    title "\nCreating and mounting filesystems:"
-    pvcreate ${MAP_LVM} && vgcreate main ${MAP_LVM}
-    lvcreate -L18G main -n swap
-    lvcreate -l 100%FREE main -n root
-    SWAP="/dev/mapper/main-swap"
-    ROOT="/dev/mapper/main-root"
-    echo "SWAP=${SWAP}" >> ${CACHE_FILE}
-    echo "ROOT=${ROOT}" >> ${CACHE_FILE}
-    mkfs.fat -F 32 ${EFI} &>/dev/null
-    mkfs.ext4 ${ROOT} &>/dev/null
-    mkswap ${SWAP} && swapon ${SWAP}
-    mount ${ROOT} /mnt
-    mkdir /mnt/efi
-    mount ${EFI} /mnt/efi
-    # Get partition UUID's. Note that "mkfs" resets UUID.
-    EFI_UUID="$(lsblk ${DISK} -o UUID,PARTLABEL | grep LINEFI | cut -d " " -f1)"
-    LVM_UUID="$(lsblk ${DISK} -o UUID,PARTLABEL | grep LVM | cut -d " " -f1)"
-    SWAP_UUID="$(lsblk ${DISK} -o UUID,NAME | grep main-swap | cut -d " " -f1)"
-    ROOT_UUID="$(lsblk ${DISK} -o UUID,NAME | grep main-root | cut -d " " -f1)"
-    # Caching variables
-    echo "EFI=${EFI}" >> ${CACHE_FILE}
-    echo "LVM=${LVM}" >> ${CACHE_FILE}
-    echo "MAP_LVM=${MAP_LVM}" >> ${CACHE_FILE}
-    echo "SWAP=${SWAP}" >> ${CACHE_FILE}
-    echo "ROOT=${ROOT}" >> ${CACHE_FILE}
-    echo "EFI_UUID=${EFI_UUID}" >> ${CACHE_FILE}
-    echo "LVM_UUID=${LVM_UUID}" >> ${CACHE_FILE}
-    echo "SWAP_UUID=${SWAP_UUID}" >> ${CACHE_FILE}
-    echo "ROOT_UUID=${ROOT_UUID}" >> ${CACHE_FILE}
-    confirm "Do you want to proceed with the installation"
+  else
+    confirm "Proceeding will erase all data on ${DISK}. Do you agree"
+    wipefs -af ${DISK} &>/dev/null
+    sgdisk ${DISK} -Zo -I \
+      -n 1:0:4096M -t 1:ef00 -c 1:LINEFI \
+      -n 2:0:0 -t 2:8e00 -c 2:LVM &>/dev/null
+  fi
+  highlight "\nCurrent partition table:" && sgdisk -p ${DISK}
+  confirm "Do you want to proceed with the installation"
+
+  title "<< FULL-DISK ENCRYPTION >>\n"
+
+  # Notify kernel about filesystem changes and fetch partition labels
+  highlight "Updating information about disk partitions, please wait."
+  sleep 5 ; partprobe ${DISK} ; sleep 5
+  EFI="/dev/$(lsblk ${DISK} -o NAME,PARTLABEL | grep LINEFI | cut -d " " -f1 | cut -c7-)"
+  LVM="/dev/$(lsblk ${DISK} -o NAME,PARTLABEL | grep LVM | cut -d " " -f1 | cut -c7-)"
+  echo "EFI=${EFI}" >> ${CACHE_FILE}
+  echo "LVM=${LVM}" >> ${CACHE_FILE}
+
+  # Set up LUKS encryption for the LVM partition
+  MSG_STR="\nSetting up a LUKS-encrypted container on the LVM partition. "
+  MSG_STR+="You will be prompted for a password."
+  highlight "${MSG_STR}"
+  modprobe dm-crypt
+  retry_cmd cryptsetup luksFormat --cipher=aes-xts-plain64 \
+    --key-size=512 --verify-passphrase ${LVM}
+  MSG_STR="\nOpening the newly created LUKS container. "
+  MSG_STR+="Please, re-enter the chosen password."
+  highlight "${MSG_STR}"
+  retry_cmd cryptsetup open --type luks ${LVM} lvm
+  MAP_LVM="/dev/mapper/lvm"
+  echo "MAP_LVM=${MAP_LVM}" >> ${CACHE_FILE}
+  enable_cleanup_trap
+
+  # Create LVM volumes, format and mount partitions
+  highlight "\nCreating and mounting filesystems:"
+  pvcreate ${MAP_LVM} && vgcreate main ${MAP_LVM}
+  lvcreate -L18G main -n swap
+  lvcreate -l 100%FREE main -n root
+  SWAP="/dev/mapper/main-swap"
+  ROOT="/dev/mapper/main-root"
+  echo "SWAP=${SWAP}" >> ${CACHE_FILE}
+  echo "ROOT=${ROOT}" >> ${CACHE_FILE}
+  mkfs.fat -F 32 ${EFI} &>/dev/null
+  mkfs.ext4 ${ROOT} &>/dev/null
+  mkswap ${SWAP} && swapon ${SWAP}
+  mount ${ROOT} /mnt
+  mkdir /mnt/efi
+  mount ${EFI} /mnt/efi
+
+  # Get partition UUID's. Note that "mkfs" resets UUID.
+  EFI_UUID="$(lsblk ${DISK} -o UUID,PARTLABEL | grep LINEFI | cut -d " " -f1)"
+  LVM_UUID="$(lsblk ${DISK} -o UUID,PARTLABEL | grep LVM | cut -d " " -f1)"
+  SWAP_UUID="$(lsblk ${DISK} -o UUID,NAME | grep main-swap | cut -d " " -f1)"
+  ROOT_UUID="$(lsblk ${DISK} -o UUID,NAME | grep main-root | cut -d " " -f1)"
+
+  # Caching variables
+  echo "EFI=${EFI}" >> ${CACHE_FILE}
+  echo "LVM=${LVM}" >> ${CACHE_FILE}
+  echo "MAP_LVM=${MAP_LVM}" >> ${CACHE_FILE}
+  echo "SWAP=${SWAP}" >> ${CACHE_FILE}
+  echo "ROOT=${ROOT}" >> ${CACHE_FILE}
+  echo "EFI_UUID=${EFI_UUID}" >> ${CACHE_FILE}
+  echo "LVM_UUID=${LVM_UUID}" >> ${CACHE_FILE}
+  echo "SWAP_UUID=${SWAP_UUID}" >> ${CACHE_FILE}
+  echo "ROOT_UUID=${ROOT_UUID}" >> ${CACHE_FILE}
+  confirm "Do you want to proceed with the installation"
 
 fi
 
@@ -924,7 +931,7 @@ if [ "$SCRIPT_MODE" -le 2 ]; then
     PKGS+=(docker docker-compose)
   fi
   # Install packages to the / (root) partition.
-  catch_wrong pacstrap -K /mnt "${PKGS[@]}"
+  retry_cmd pacstrap -K /mnt "${PKGS[@]}"
   success "Basic packages installed successfully!"
   confirm "Do you want to proceed with the installation"
   # Enable daemons.
@@ -976,11 +983,11 @@ fi
     arch-chroot /mnt ln -sf /usr/share/zoneinfo/Europe/Berlin /etc/localtime
     # Set up users.
     title "Choose a password for the root user:"
-    catch_wrong arch-chroot /mnt passwd
+    retry_cmd arch-chroot /mnt passwd
     ask RESPONSE "Choose a username of a non-root user:" && USERNAME="${RESPONSE}"
     arch-chroot /mnt useradd -m -G wheel -s /bin/zsh ${USERNAME}
     title "Choose a password for ${USERNAME}:"
-    catch_wrong arch-chroot /mnt passwd ${USERNAME}
+    retry_cmd arch-chroot /mnt passwd ${USERNAME}
     sed -i 's/# \(%wheel ALL=(ALL\(:ALL\|\)) ALL\)/\1/g' /mnt/etc/sudoers
     MSG_STR="[daemon]\n"
     MSG_STR+="WaylandEnable=True\n"

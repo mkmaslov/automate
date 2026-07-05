@@ -52,7 +52,7 @@ status() { cprint 1 "$WHITE" "${1}"; }
 # Display code or terminal commands
 show_code() { cprint 1 "$WHITE" "->  ${1}\n"; }
 # Display a success message
-success() { cprint 1 "$GREEN" "OK: ${1}\n"; }
+success() { cprint 1 "$GREEN" "${1}\n"; }
 # Display a failure message
 fail() { cprint 2 "$RED" "${1}\n"; }
 # Display an error message
@@ -294,6 +294,13 @@ enforce_cmds() {
       error "Missing required command: $cmd"
       return 1
     fi
+  done
+}
+
+# Retry command until it succeeds
+retry_cmd () {
+  until "$@"; do
+    warning "command failed with status $?. Retrying..."
   done
 }
 
