@@ -232,12 +232,12 @@ if [ "$SCRIPT_MODE" -le 0 ]; then
   [ -f "${CACHE_FILE}" ] && rm "${CACHE_FILE}"
 
   # Prompt the user to choose a dual-boot mode
-  title="Arch Linux only or dual-boot?"
+  title="Arch Linux only or dual-boot?\n"
   subtitle="You can use Arch Linux as the only OS. "
-  subtitle+="In this case, it will span the entire hard drive. "
+  subtitle+="In this case, it will span the entire hard drive.\n"
   subtitle+="Alternatively, you can install Arch Linux alongside "
   subtitle+="an existing Windows installation. In this case, "
-  subtitle+="Arch Linux will span the entire remaining space on the hard drive."
+  subtitle+="Arch Linux will span the entire remaining space on the hard drive.\n"
   options=("Arch Linux only (default)" "Dual-boot with Windows")
   single_choice result options "$title" "$subtitle"
   DUAL_BOOT_MODE="${result}"
