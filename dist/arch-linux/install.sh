@@ -50,27 +50,24 @@ cprint() {
   fi
 }
 
-# Resolve the output file descriptor for text UI.
-text_fd() { printf '%s' "${1:-${TTY_FD:-1}}"; }
-
 # Display a title
-title() { cprint "$(text_fd "${2:-}")" "$BLUE" "${1}\n"; }
+title() { cprint 1 "$BLUE" "${1}\n"; }
 # Display a message
-msg() { cprint "$(text_fd "${2:-}")" "$COLOR_OFF" "${1}\n"; }
+msg() { cprint 1 "$COLOR_OFF" "${1}\n"; }
 # Display a highlighted message
-highlight() { cprint "$(text_fd "${2:-}")" "$WHITE" "${1}\n"; }
+highlight() { cprint 1 "$WHITE" "${1}\n"; }
 # Display a status line
-status() { cprint "$(text_fd "${2:-}")" "$WHITE" "${1}"; }
+status() { cprint 1 "$WHITE" "${1}"; }
 # Display code or terminal commands
-show_code() { cprint "$(text_fd "${2:-}")" "$WHITE" "->  ${1}\n"; }
+show_code() { cprint 1 "$WHITE" "->  ${1}\n"; }
 # Display a success message
-success() { cprint "$(text_fd "${2:-}")" "$GREEN" "OK: ${1}\n"; }
+success() { cprint 1 "$GREEN" "OK: ${1}\n"; }
 # Display a failure message
-fail() { cprint "$(text_fd "${2:-}")" "$RED" "${1}\n"; }
+fail() { cprint 2 "$RED" "${1}\n"; }
 # Display an error message
-error() { cprint "$(text_fd "${2:-}")" "$RED" "ERROR: ${1}\n"; }
+error() { cprint 2 "$RED" "ERROR: ${1}\n"; }
 # Display a warning message
-warning() { cprint "$(text_fd "${2:-}")" "$YELLOW" "WARN: ${1}\n"; }
+warning() { cprint 1 "$YELLOW" "WARN: ${1}\n"; }
 # Display an error, if function argument is not provided
 bad_arg() { error "$1 called without argument: $2"; return 1; }
 
@@ -105,11 +102,8 @@ confirm_or_exit() {
 # Prompt user to choose a single option out of a list
 # Adapted from: https://unix.stackexchange.com/a/415155
 single_choice() {
-  local FD
-  FD="$(text_fd "${5:-}")"
-
   # Validate that the terminal is interactive
-  if ! [[ -t 0 && -t "$FD" ]]; then
+  if ! [[ -t 0 && -t 1 ]]; then
     error "${FUNCNAME[0]} requires an interactive terminal"
     return 1
   fi
@@ -131,9 +125,9 @@ single_choice() {
   fi
 
   # Print out title, subtitle and instructions
-  [[ -n "${TITLE}" ]] && title "$TITLE" "$FD"
-  [[ -n "${SUBTITLE}" ]] && highlight "$SUBTITLE" "$FD"
-  printf '%s\n' "[ Navigate (Up/Down) | Confirm (Enter) ]" >&"$FD"
+  [[ -n "${TITLE}" ]] && title "$TITLE"
+  [[ -n "${SUBTITLE}" ]] && highlight "$SUBTITLE"
+  printf '%s\n' "[ Navigate (Up/Down) | Confirm (Enter) ]"
 
   # Print the upper table border
   local MAX_LEN HR ESC OPTION
@@ -141,25 +135,25 @@ single_choice() {
   MAX_LEN=$(printf '%s\n' "${OPTIONS_LIST[@]}" |
     awk '{ if (length > max) max = length } END { print max }')
   printf -v HR '%*s'  "$((MAX_LEN+7))" '' && HR=${HR// /—}
-  printf '%s\n' "$HR" >&"$FD"
+  printf '%s\n' "$HR"
 
   # Helper functions for terminal print control and key input
   ESC=$'\033'
-  cursor_blink_on()  { printf "$ESC[?25h" >&"$FD"; }
-  cursor_blink_off() { printf "$ESC[?25l" >&"$FD"; }
-  cursor_to()        { printf "$ESC[$1;${2:-1}H" >&"$FD"; }
-  print_option()   { printf '[ ]   %s ' "$1" >&"$FD"; }
-  print_selected() { printf '[+]  %s[7m %s %s[27m' "$ESC" "$1" "$ESC" >&"$FD"; }
-  get_cursor_row()   { printf '\E[6n' >&"$FD"; IFS=';' read -sdR ROW COL; echo ${ROW#*[}; }
+  cursor_blink_on()  { printf "$ESC[?25h"; }
+  cursor_blink_off() { printf "$ESC[?25l"; }
+  cursor_to()        { printf "$ESC[$1;${2:-1}H"; }
+  print_option()   { printf '[ ]   %s ' "$1"; }
+  print_selected() { printf '[+]  %s[7m %s %s[27m' "$ESC" "$1" "$ESC"; }
+  get_cursor_row()   { IFS=';' read -sdR -p $'\E[6n' ROW COL; echo ${ROW#*[}; }
   key_input()        { read -s -n3 KEY 2>/dev/null >&2
                         if [[ $KEY = $ESC[A ]]; then echo up;    fi
                         if [[ $KEY = $ESC[B ]]; then echo down;  fi
                         if [[ $KEY = ""     ]]; then echo enter; fi; }
 
   # Initially print empty new lines (scroll down if at bottom of screen)
-  for OPTION in "${OPTIONS_LIST[@]}"; do printf "\n" >&"$FD"; done
+  for OPTION in "${OPTIONS_LIST[@]}"; do printf "\n"; done
   # Print the lower table border
-  printf '%s\n' "$HR" >&"$FD"
+  printf '%s\n' "$HR"
 
   # Determine current screen position for overwriting the options
   local LAST_ROW=$(get_cursor_row)
@@ -583,15 +577,8 @@ enable_cleanup_trap () {
 # Main body of the script
 # -----------------------------------------------------------------------------
 
-# File descriptor used for direct terminal output.
-exec {TTY_FD}>&1
-
 # Reset terminal window
-loadkeys us ; setfont ter-132b ; clear >&"${TTY_FD}"
-
-# Save all output into a log file
-LOG_FILE="/tmp/arch-install.log"
-exec > >(tee -a "$LOG_FILE") 2>&1
+loadkeys us ; setfont ter-132b ; clear
 
 # Create a temporary file for keeping script variables
 CACHE_FILE="/tmp/arch-install.cache"
@@ -611,7 +598,7 @@ options=("Begin full installation (default)" \
   "Show instructions for establishing/testing Internet connection" \
   "Show instructions for resetting Secure Boot" \
   "Show instructions for configuring UEFI bootloader")
-single_choice result options "$title" "$subtitle" "${TTY_FD}"
+single_choice result options "$title" "$subtitle"
 SCRIPT_MODE="${result}"
 
 # If selected - unmount drives
@@ -619,9 +606,9 @@ SCRIPT_MODE="${result}"
 
 # If selected - show instructions
 case "${SCRIPT_MODE}" in
-  7) clear >&"${TTY_FD}" && HELP_INTERNET && exit ;;
-  8) clear >&"${TTY_FD}" && HELP_SECURE_BOOT && exit ;;
-  9) clear >&"${TTY_FD}" && HELP_UEFI && exit ;;
+  7) clear && HELP_INTERNET && exit ;;
+  8) clear && HELP_SECURE_BOOT && exit ;;
+  9) clear && HELP_UEFI && exit ;;
 esac
 
 # If resuming after the disk configuration,
@@ -647,7 +634,7 @@ if [ "$SCRIPT_MODE" -le 0 ]; then
   subtitle+="an existing Windows installation. In this case, "
   subtitle+="Arch Linux will span the entire remaining space on the hard drive."
   options=("Arch Linux only (default)" "Dual-boot with Windows")
-  single_choice result options "$title" "$subtitle" "${TTY_FD}"
+  single_choice result options "$title" "$subtitle"
   DUAL_BOOT_MODE="${result}"
   echo "DUAL_BOOT_MODE=${DUAL_BOOT_MODE}" >> ${CACHE_FILE}
 
@@ -659,7 +646,7 @@ if [ "$SCRIPT_MODE" -le 0 ]; then
     subtitle+="Server installation enables remote disk decryption, "
     subtitle+="networking and containerization tools. "
     options=("Personal computer (default)" "Server")
-    single_choice result options "$title" "$subtitle" "${TTY_FD}"
+    single_choice result options "$title" "$subtitle"
     SERVER_MODE="${result}"
   else
     SERVER_MODE="0"
@@ -673,7 +660,7 @@ if [ "$SCRIPT_MODE" -le 0 ]; then
     subtitle+="additional drivers and enable additional kernel settings."
     options=("Integrated Intel/AMD GPU only (default)" \
       "Discrete NVIDIA GPU" "Discrete AMD GPU")
-    single_choice result options "$title" "$subtitle" "${TTY_FD}"
+    single_choice result options "$title" "$subtitle"
     GPU_MODE="${result}"
   else
     GPU_MODE="0"
@@ -687,7 +674,7 @@ if [ "$SCRIPT_MODE" -le 0 ]; then
     subtitle+="Activate only if you know how to configure clamav."
     options=("No additional security (default)" \
       "Activate antivirus, sandboxing and Mandatory Access Control")
-    single_choice result options "$title" "$subtitle" "${TTY_FD}"
+    single_choice result options "$title" "$subtitle"
     SECURITY_MODE="${result}"
   else
     SECURITY_MODE="1"
@@ -700,7 +687,7 @@ if [ "$SCRIPT_MODE" -le 0 ]; then
 
 
   # Clear CLI output.
-  clear >&"${TTY_FD}" ; title "<< PRE-INSTALLATION CHECKS >>\n"
+  clear ; title "<< PRE-INSTALLATION CHECKS >>\n"
   # Check that system is booted in UEFI mode.
   status "Checking UEFI boot mode: "
   COUNT=$(ls /sys/firmware/efi/efivars | grep -c '.')
@@ -752,7 +739,7 @@ fi
 
 if [ "$SCRIPT_MODE" -le 1 ]; then
   # Clear CLI output.
-  load_cache ; clear >&"${TTY_FD}" ; title "<< DISK CONFIGURATION >>\n"
+  load_cache ; clear ; title "<< DISK CONFIGURATION >>\n"
   #Choose the target drive.
   title="Choose a target drive for the installation:"
   subtitle="(entire block device, not a partition)"
@@ -761,7 +748,7 @@ if [ "$SCRIPT_MODE" -le 1 ]; then
     model = substr($0, index($0, $4),20); print "/dev/" $1, $3, $2, model}')
     mapfile -t options < <(printf '%s\n' "$raw" | column -t  -s "|" -o " | ")
     # Display options and wait for user response.
-    single_choice result options "${title}" "${subtitle}" "${TTY_FD}"
+    single_choice result options "${title}" "${subtitle}"
     DISK="${options[$result]%% *}"
     echo "DISK=${DISK}" >> ${CACHE_FILE}
     # Partition the target drive.
@@ -789,7 +776,7 @@ if [ "$SCRIPT_MODE" -le 1 ]; then
     title "\nCurrent partition table:" && sgdisk -p ${DISK}
     confirm "Do you want to proceed with the installation"
     # Clear CLI output.
-    clear >&"${TTY_FD}" ; title "<< FULL-DISK ENCRYPTION >>\n"
+    clear ; title "<< FULL-DISK ENCRYPTION >>\n"
     # Notify kernel about filesystem changes and fetch partition labels.
     title "Updating information about disk partitions, please wait."
     sleep 5 ; partprobe ${DISK} ; sleep 5
@@ -852,7 +839,7 @@ if [ "$SCRIPT_MODE" -le 1 ]; then
 
   if [ "$SCRIPT_MODE" -le 2 ]; then
     # Clear CLI output.
-    load_cache ; clear >&"${TTY_FD}" ; title "<< PACKAGE INSTALLATION >>\n"
+    load_cache ; clear ; title "<< PACKAGE INSTALLATION >>\n"
     # Provide instructions for updating pacman keys.
     title "Is your USB installation medium too old?"
     MSG_STR="If you have created the USB installation medium several months ago, "
@@ -973,7 +960,7 @@ if [ "$SCRIPT_MODE" -le 1 ]; then
 
   if [ "$SCRIPT_MODE" -le 3 ]; then
     # Clear CLI output.
-    load_cache ; clear >&"${TTY_FD}" ; title "<< USER AND ROOT USER CONFIGURATION >>\n"
+    load_cache ; clear ; title "<< USER AND ROOT USER CONFIGURATION >>\n"
     # Set hostname.
     ask RESPONSE "Choose a hostname (name of this computer):" && HOSTNAME="${RESPONSE}"
     echo "${HOSTNAME}" > /mnt/etc/hostname
@@ -1046,7 +1033,7 @@ if [ "$SCRIPT_MODE" -le 1 ]; then
 
   if [ "$SCRIPT_MODE" -le 4 ]; then
     # Clear CLI output.
-    load_cache ; clear >&"${TTY_FD}" ; title "<< UNIFIED KERNEL IMAGE CREATION >>\n"
+    load_cache ; clear ; title "<< UNIFIED KERNEL IMAGE CREATION >>\n"
     # Configure disk mapping during decryption.
     MSG_STR="lvm UUID=${LVM_UUID} - luks,password-echo=no,"
     MSG_STR+="x-systemd.device-timeout=0,timeout=0,no-read-workqueue,"
@@ -1124,7 +1111,7 @@ if [ "$SCRIPT_MODE" -le 1 ]; then
 
   if [ "$SCRIPT_MODE" -le 5 ]; then
     # Clear CLI output.
-    load_cache ; clear >&"${TTY_FD}" ; title "<< SECURE BOOT AND UEFI CONFIGURATION >>\n"
+    load_cache ; clear ; title "<< SECURE BOOT AND UEFI CONFIGURATION >>\n"
     # Configure Secure Boot.
     title "Configuring Secure Boot:"
     title "WARNING! This operation may display some errors, ignore them unless the script fails."
@@ -1150,7 +1137,7 @@ if [ "$SCRIPT_MODE" -le 1 ]; then
     success "UEFI boot entries successfully created!"
     confirm "Finish the installation"
     # Finish the installation.
-    clear >&"${TTY_FD}" ; success "<< Arch Linux installation completed!>>\n"
+    clear ; success "<< Arch Linux installation completed!>>\n"
     efibootmgr
     HELP_UEFI
 

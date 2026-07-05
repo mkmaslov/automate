@@ -185,15 +185,8 @@ enable_cleanup_trap () {
 # Main body of the script
 # -----------------------------------------------------------------------------
 
-# File descriptor used for direct terminal output.
-exec {TTY_FD}>&1
-
 # Reset terminal window
-loadkeys us ; setfont ter-132b ; clear >&"${TTY_FD}"
-
-# Save all output into a log file
-LOG_FILE="/tmp/arch-install.log"
-exec > >(tee -a "$LOG_FILE") 2>&1
+loadkeys us ; setfont ter-132b ; clear
 
 # Create a temporary file for keeping script variables
 CACHE_FILE="/tmp/arch-install.cache"
@@ -213,7 +206,7 @@ options=("Begin full installation (default)" \
   "Show instructions for establishing/testing Internet connection" \
   "Show instructions for resetting Secure Boot" \
   "Show instructions for configuring UEFI bootloader")
-single_choice result options "$title" "$subtitle" "${TTY_FD}"
+single_choice result options "$title" "$subtitle"
 SCRIPT_MODE="${result}"
 
 # If selected - unmount drives
@@ -221,9 +214,9 @@ SCRIPT_MODE="${result}"
 
 # If selected - show instructions
 case "${SCRIPT_MODE}" in
-  7) clear >&"${TTY_FD}" && HELP_INTERNET && exit ;;
-  8) clear >&"${TTY_FD}" && HELP_SECURE_BOOT && exit ;;
-  9) clear >&"${TTY_FD}" && HELP_UEFI && exit ;;
+  7) clear && HELP_INTERNET && exit ;;
+  8) clear && HELP_SECURE_BOOT && exit ;;
+  9) clear && HELP_UEFI && exit ;;
 esac
 
 # If resuming after the disk configuration,
@@ -249,7 +242,7 @@ if [ "$SCRIPT_MODE" -le 0 ]; then
   subtitle+="an existing Windows installation. In this case, "
   subtitle+="Arch Linux will span the entire remaining space on the hard drive."
   options=("Arch Linux only (default)" "Dual-boot with Windows")
-  single_choice result options "$title" "$subtitle" "${TTY_FD}"
+  single_choice result options "$title" "$subtitle"
   DUAL_BOOT_MODE="${result}"
   echo "DUAL_BOOT_MODE=${DUAL_BOOT_MODE}" >> ${CACHE_FILE}
 
@@ -261,7 +254,7 @@ if [ "$SCRIPT_MODE" -le 0 ]; then
     subtitle+="Server installation enables remote disk decryption, "
     subtitle+="networking and containerization tools. "
     options=("Personal computer (default)" "Server")
-    single_choice result options "$title" "$subtitle" "${TTY_FD}"
+    single_choice result options "$title" "$subtitle"
     SERVER_MODE="${result}"
   else
     SERVER_MODE="0"
@@ -275,7 +268,7 @@ if [ "$SCRIPT_MODE" -le 0 ]; then
     subtitle+="additional drivers and enable additional kernel settings."
     options=("Integrated Intel/AMD GPU only (default)" \
       "Discrete NVIDIA GPU" "Discrete AMD GPU")
-    single_choice result options "$title" "$subtitle" "${TTY_FD}"
+    single_choice result options "$title" "$subtitle"
     GPU_MODE="${result}"
   else
     GPU_MODE="0"
@@ -289,7 +282,7 @@ if [ "$SCRIPT_MODE" -le 0 ]; then
     subtitle+="Activate only if you know how to configure clamav."
     options=("No additional security (default)" \
       "Activate antivirus, sandboxing and Mandatory Access Control")
-    single_choice result options "$title" "$subtitle" "${TTY_FD}"
+    single_choice result options "$title" "$subtitle"
     SECURITY_MODE="${result}"
   else
     SECURITY_MODE="1"
@@ -302,7 +295,7 @@ if [ "$SCRIPT_MODE" -le 0 ]; then
 
 
   # Clear CLI output.
-  clear >&"${TTY_FD}" ; title "<< PRE-INSTALLATION CHECKS >>\n"
+  clear ; title "<< PRE-INSTALLATION CHECKS >>\n"
   # Check that system is booted in UEFI mode.
   status "Checking UEFI boot mode: "
   COUNT=$(ls /sys/firmware/efi/efivars | grep -c '.')
@@ -354,7 +347,7 @@ fi
 
 if [ "$SCRIPT_MODE" -le 1 ]; then
   # Clear CLI output.
-  load_cache ; clear >&"${TTY_FD}" ; title "<< DISK CONFIGURATION >>\n"
+  load_cache ; clear ; title "<< DISK CONFIGURATION >>\n"
   #Choose the target drive.
   title="Choose a target drive for the installation:"
   subtitle="(entire block device, not a partition)"
@@ -363,7 +356,7 @@ if [ "$SCRIPT_MODE" -le 1 ]; then
     model = substr($0, index($0, $4),20); print "/dev/" $1, $3, $2, model}')
     mapfile -t options < <(printf '%s\n' "$raw" | column -t  -s "|" -o " | ")
     # Display options and wait for user response.
-    single_choice result options "${title}" "${subtitle}" "${TTY_FD}"
+    single_choice result options "${title}" "${subtitle}"
     DISK="${options[$result]%% *}"
     echo "DISK=${DISK}" >> ${CACHE_FILE}
     # Partition the target drive.
@@ -391,7 +384,7 @@ if [ "$SCRIPT_MODE" -le 1 ]; then
     title "\nCurrent partition table:" && sgdisk -p ${DISK}
     confirm "Do you want to proceed with the installation"
     # Clear CLI output.
-    clear >&"${TTY_FD}" ; title "<< FULL-DISK ENCRYPTION >>\n"
+    clear ; title "<< FULL-DISK ENCRYPTION >>\n"
     # Notify kernel about filesystem changes and fetch partition labels.
     title "Updating information about disk partitions, please wait."
     sleep 5 ; partprobe ${DISK} ; sleep 5
@@ -454,7 +447,7 @@ if [ "$SCRIPT_MODE" -le 1 ]; then
 
   if [ "$SCRIPT_MODE" -le 2 ]; then
     # Clear CLI output.
-    load_cache ; clear >&"${TTY_FD}" ; title "<< PACKAGE INSTALLATION >>\n"
+    load_cache ; clear ; title "<< PACKAGE INSTALLATION >>\n"
     # Provide instructions for updating pacman keys.
     title "Is your USB installation medium too old?"
     MSG_STR="If you have created the USB installation medium several months ago, "
@@ -575,7 +568,7 @@ if [ "$SCRIPT_MODE" -le 1 ]; then
 
   if [ "$SCRIPT_MODE" -le 3 ]; then
     # Clear CLI output.
-    load_cache ; clear >&"${TTY_FD}" ; title "<< USER AND ROOT USER CONFIGURATION >>\n"
+    load_cache ; clear ; title "<< USER AND ROOT USER CONFIGURATION >>\n"
     # Set hostname.
     ask RESPONSE "Choose a hostname (name of this computer):" && HOSTNAME="${RESPONSE}"
     echo "${HOSTNAME}" > /mnt/etc/hostname
@@ -648,7 +641,7 @@ if [ "$SCRIPT_MODE" -le 1 ]; then
 
   if [ "$SCRIPT_MODE" -le 4 ]; then
     # Clear CLI output.
-    load_cache ; clear >&"${TTY_FD}" ; title "<< UNIFIED KERNEL IMAGE CREATION >>\n"
+    load_cache ; clear ; title "<< UNIFIED KERNEL IMAGE CREATION >>\n"
     # Configure disk mapping during decryption.
     MSG_STR="lvm UUID=${LVM_UUID} - luks,password-echo=no,"
     MSG_STR+="x-systemd.device-timeout=0,timeout=0,no-read-workqueue,"
@@ -726,7 +719,7 @@ if [ "$SCRIPT_MODE" -le 1 ]; then
 
   if [ "$SCRIPT_MODE" -le 5 ]; then
     # Clear CLI output.
-    load_cache ; clear >&"${TTY_FD}" ; title "<< SECURE BOOT AND UEFI CONFIGURATION >>\n"
+    load_cache ; clear ; title "<< SECURE BOOT AND UEFI CONFIGURATION >>\n"
     # Configure Secure Boot.
     title "Configuring Secure Boot:"
     title "WARNING! This operation may display some errors, ignore them unless the script fails."
@@ -752,7 +745,7 @@ if [ "$SCRIPT_MODE" -le 1 ]; then
     success "UEFI boot entries successfully created!"
     confirm "Finish the installation"
     # Finish the installation.
-    clear >&"${TTY_FD}" ; success "<< Arch Linux installation completed!>>\n"
+    clear ; success "<< Arch Linux installation completed!>>\n"
     efibootmgr
     HELP_UEFI
 
