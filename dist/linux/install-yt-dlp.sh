@@ -75,7 +75,7 @@ bad_arg() { error "$1 called without argument: $2"; return 1; }
 #}
 ask() {
   local output_var="$1" input
-  cprint 1 "$YELLOW" "${2:-} "
+  cprint 1 "$BLUE" "${2:-} "
   IFS= read -r input
   printf -v "$output_var" '%s' "$input"
 }

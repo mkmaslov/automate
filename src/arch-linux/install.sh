@@ -335,11 +335,11 @@ fi
 
 if [ "$SCRIPT_MODE" -le 1 ]; then
 
-  load_cache ; title "\n<< DISK CONFIGURATION >>\n"
-
   # Choose the target drive
-  title="Choose a target drive for the installation:"
-  subtitle="(entire block device, not a partition)"
+  load_cache
+  title="\n<< DISK CONFIGURATION >>"
+  subtitle="Choose a target drive for the installation "
+  subtitle+="(entire block device, not a partition):"
   # Obtain information about disk drives
   raw=$(lsblk -dno NAME,SIZE,TRAN,MODEL | awk -v OFS='|' '{
     model = substr($0, index($0, $4),20); print "/dev/" $1, $3, $2, model}')
@@ -365,7 +365,9 @@ if [ "$SCRIPT_MODE" -le 1 ]; then
         -n 6:0:0 -t 6:8e00 -c 6:LVM &>/dev/null
     fi
   else
-    confirm "Proceeding will erase all data on ${DISK}. Do you agree"
+    MSG_STR="Proceeding will erase all data on"
+    MSG_STR+="${RED} ${DISK}${BLUE}. Do you agree [Y/n]?"
+    confirm "${MSG_STR}"
     wipefs -af ${DISK} &>/dev/null
     sgdisk ${DISK} -Zo -I \
       -n 1:0:4096M -t 1:ef00 -c 1:LINEFI \
@@ -374,7 +376,7 @@ if [ "$SCRIPT_MODE" -le 1 ]; then
   highlight "\nCurrent partition table:" && sgdisk -p ${DISK}
   confirm "Do you want to proceed with the installation"
 
-  title "<< FULL-DISK ENCRYPTION >>\n"
+  title "\n<< FULL-DISK ENCRYPTION >>\n"
 
   # Notify kernel about filesystem changes and fetch partition labels
   highlight "Updating information about disk partitions, please wait."
