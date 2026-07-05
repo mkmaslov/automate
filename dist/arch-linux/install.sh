@@ -421,6 +421,7 @@ get_next_free_partition_number() {
 confirm() {
   ask RESPONSE "${1} [Y/n]?"
   if [[ ${RESPONSE,,} =~ ^(n|no)$ ]]; then
+    [ -n "${2:-}" ] && "$2"
     fail "\nCancelling installation!"
     unmount_drives
     exit
@@ -437,7 +438,6 @@ catch_wrong () {
 
 # Instructions for setting up Internet connection
 HELP_INTERNET () {
-  title "<< INTERNET CONFIGURATION >>\n"
   MSG_STR="Before proceeding with the installation, "
   MSG_STR+="please make sure you have a functional Internet connection.\n"
   MSG_STR+="You can either connect via an Ethernet cable or "
@@ -463,7 +463,6 @@ HELP_INTERNET () {
 
 # Instructions for resetting the Secure Boot
 HELP_SECURE_BOOT () {
-  title "<< SECURE BOOT RESET >>\n"
   highlight "Full Secure Boot reset is recommended before using this script.\n"
   msg "To perform the reset:"
   msg "- Enter BIOS firmware (by pressing F1/F2/F10/Esc/Enter/Del at boot)"
@@ -609,8 +608,8 @@ case "${SCRIPT_MODE}" in
   # Unmount drives
   6) unmount_drives ; exit ;;
   # Show instructions
-  7) HELP_INTERNET ; exit ;;
-  8) HELP_SECURE_BOOT ; exit ;;
+  7) title "<< INTERNET CONFIGURATION >>\n" ; HELP_INTERNET ; exit ;;
+  8) title "<< SECURE BOOT RESET >>\n" ; HELP_SECURE_BOOT ; exit ;;
   9) HELP_UEFI ; exit ;;
 esac
 
@@ -701,7 +700,7 @@ if [ "$SCRIPT_MODE" -le 0 ]; then
   MSG_STR+="The output should contain: disabled (setup)."
   highlight "${MSG_STR}"
   bootctl status --no-pager 2>/dev/null | grep --color "Secure Boot" || true
-  confirm "Did you reset and disable Secure Boot"
+  confirm "Did you reset and disable Secure Boot" HELP_SECURE_BOOT
 
   # Test Internet connection
   status "\nTesting Internet connection (takes few seconds): "
