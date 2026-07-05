@@ -583,7 +583,7 @@ loadkeys us ; setfont ter-132b ; clear
 
 # Save all output into a log file
 LOG_FILE="/tmp/arch-install.log"
-exec >"$LOG_FILE" 2>&1
+exec > >(tee -a "$LOG_FILE") 2>&1
 
 # Create a temporary file for keeping script variables
 CACHE_FILE="/tmp/arch-install.cache"
