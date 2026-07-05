@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 
 #------------------------------------------------------------------------------
-# This script performs basic Arch Linux installation.
+# This script performs basic Arch Linux installation
 #
 # The installation includes:
 # - secure boot chain
@@ -435,7 +435,7 @@ catch_wrong () {
   done
 }
 
-# Instructions for setting up Internet connection.
+# Instructions for setting up Internet connection
 HELP_INTERNET () {
   title "<< INTERNET CONFIGURATION >>\n"
   MSG_STR="Before proceeding with the installation, "
@@ -461,7 +461,7 @@ HELP_INTERNET () {
   show_code "ping archlinux.org\n"
 }
 
-# Instructions for resetting the Secure Boot.
+# Instructions for resetting the Secure Boot
 HELP_SECURE_BOOT () {
   title "<< SECURE BOOT RESET >>\n"
   highlight "Full Secure Boot reset is recommended before using this script.\n"
@@ -473,7 +473,7 @@ HELP_SECURE_BOOT () {
   msg "- Disable Secure Boot\n"
 }
 
-# Instructions for setting up the UEFI bootloader.
+# Instructions for setting up the UEFI bootloader
 HELP_UEFI () {
   title "<< UEFI BOOTLOADER CONFIGURATION >>\n"
   MSG_STR="To boot into the newly installed Arch Linux, "
@@ -492,7 +492,7 @@ HELP_UEFI () {
   msg "In BIOS, enable Secure Boot and Boot Order Lock (if available).\n"
 }
 
-# Load variables from the installation cache.
+# Load variables from the installation cache
 load_cache () {
   [ -f "${CACHE_FILE}" ] || { error "installation cache is missing"; exit 1; }
   source "${CACHE_FILE}"
@@ -575,16 +575,20 @@ enable_cleanup_trap () {
 
 
 # -----------------------------------------------------------------------------
-# Main body of the script.
+# Main body of the script
 # -----------------------------------------------------------------------------
 
-# Reset terminal window.
+# Reset terminal window
 loadkeys us ; setfont ter-132b ; clear
 
-# Create a temporary file for keeping script variables.
-CACHE_FILE="/tmp/arch_install_temp"
+# Save all output into a log file
+LOG_FILE="/tmp/arch-install.log"
+exec >"$LOG_FILE" 2>&1
 
-# Prompt the user for installation mode.
+# Create a temporary file for keeping script variables
+CACHE_FILE="/tmp/arch-install.cache"
+
+# Prompt the user for installation mode
 title="<< WELCOME TO ARCH LINUX INSTALLATION >>\n"
 subtitle="You can either initiate the full installation, "
 subtitle+="restart a previously unfinished installation from a certain step, "
@@ -602,34 +606,32 @@ options=("Begin full installation (default)" \
 single_choice result options "$title" "$subtitle"
 SCRIPT_MODE="${result}"
 
-# If selected - unmount drives.
+# If selected - unmount drives
 [ ${SCRIPT_MODE} -eq 6 ] && unmount_drives
 
-# If selected - show instructions.
+# If selected - show instructions
 case "${SCRIPT_MODE}" in
   7) clear && HELP_INTERNET && exit ;;
   8) clear && HELP_SECURE_BOOT && exit ;;
   9) clear && HELP_UEFI && exit ;;
 esac
 
-# If resuming after disk configuration, verify that installed filesystems
-# are mounted and encrypted volumes are open.
+# If resuming after the disk configuration,
+# verify that required filesystems are mounted and encrypted volumes are open
 if [ "$SCRIPT_MODE" -ge 2 ] && [ "$SCRIPT_MODE" -le 5 ]; then
   require_resume_state
 fi
 
-success "good"
-exit 0
-error "bad"
-
 # -----------------------------------------------------------------------------
-# Initial checks.
+# Initial checks
 # -----------------------------------------------------------------------------
 
 if [ "$SCRIPT_MODE" -le 0 ]; then
-  # Clear cache from other installations.
+
+  # Clear cache from other installations
   [ -f "${CACHE_FILE}" ] && rm "${CACHE_FILE}"
-  # Prompt the user to choose a dual-boot mode.
+
+  # Prompt the user to choose a dual-boot mode
   title="Arch Linux only or dual-boot?"
   subtitle="You can use Arch Linux as the only OS. "
   subtitle+="In this case, it will span the entire hard drive. "
@@ -640,7 +642,8 @@ if [ "$SCRIPT_MODE" -le 0 ]; then
   single_choice result options "$title" "$subtitle"
   DUAL_BOOT_MODE="${result}"
   echo "DUAL_BOOT_MODE=${DUAL_BOOT_MODE}" >> ${CACHE_FILE}
-  # Prompt the user to choose a machine type.
+
+  # Prompt the user to choose a machine type
   if [ "${DUAL_BOOT_MODE}" -eq 0 ]; then
     title="Personal computer or server?"
     subtitle="Installation for a personal computer includes "
@@ -654,7 +657,8 @@ if [ "$SCRIPT_MODE" -le 0 ]; then
     SERVER_MODE="0"
   fi
   echo "SERVER_MODE=${SERVER_MODE}" >> ${CACHE_FILE}
-  # Prompt the user to choose a GPU driver.
+
+  # Prompt the user to choose a GPU driver
   if [ "${SERVER_MODE}" -eq 0 ]; then
     title="Which GPU do you have?"
     subtitle="For an NVIDIA GPU, the script needs to install "
@@ -667,7 +671,8 @@ if [ "$SCRIPT_MODE" -le 0 ]; then
     GPU_MODE="0"
   fi
   echo "GPU_MODE=${GPU_MODE}" >> ${CACHE_FILE}
-  # Prompt the user to choose security mode.
+
+  # Prompt the user to choose security mode
   if [ "${SERVER_MODE}" -eq 0 ]; then
     title="Do you want advanced security settings?"
     subtitle="Advanced security settings may cause some applications to break."
@@ -680,6 +685,12 @@ if [ "$SCRIPT_MODE" -le 0 ]; then
     SECURITY_MODE="1"
   fi
   echo "SECURITY_MODE=${SECURITY_MODE}" >> ${CACHE_FILE}
+
+  success "good"
+  exit 0
+  error "bad"
+
+
   # Clear CLI output.
   clear ; title "<< PRE-INSTALLATION CHECKS >>\n"
   # Check that system is booted in UEFI mode.
