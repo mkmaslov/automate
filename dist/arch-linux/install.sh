@@ -504,32 +504,26 @@ load_cache () {
   source "${CACHE_FILE}"
 }
 
-# Verify that a paused installation can be resumed from the selected step
+# Verify that a paused installation can be resumed
 validate_resume () {
   local rc=0
+  local swap="/dev/mapper/main-swap"
+  local swap_found=0 swap_path swap_dev
   load_cache
-  if ! cryptsetup status lvm >/dev/null 2>&1; then
-    error "LUKS container (lvm) is not open!"
-    rc=1
-  fi
-  if ! vgs main >/dev/null 2>&1; then
-    error "LVM volume group (main) is not active"
-    rc=1
-  fi
-  if ! swapon --show=NAME --noheadings | grep -Fxq "${SWAP:-/dev/mapper/main-swap}"; then
-    error "swap is not enabled: ${SWAP:-/dev/mapper/main-swap}"
-    rc=1
-  fi
-  if ! mountpoint -q /mnt; then
-    error "root filesystem is not mounted at /mnt"
-    rc=1
-  fi
-  if ! mountpoint -q /mnt/efi; then
-    error "EFI filesystem is not mounted at /mnt/efi"
-    rc=1
-  fi
+  cryptsetup status lvm >/dev/null 2>&1 || { error "LUKS container is not open!"; rc=1; }
+  vgs main >/dev/null 2>&1 || { error "LVM group is not active"; rc=1; }
+  swap_dev="$(stat -Lc '%t:%T' "$swap" 2>/dev/null || true)"
+  for swap_path in $(swapon --show=NAME --noheadings); do
+    if [ -n "$swap_dev" ] && [ "$(stat -Lc '%t:%T' "$swap_path" 2>/dev/null || true)" = "$swap_dev" ]; then
+      swap_found=1
+      break
+    fi
+  done
+  [ "$swap_found" -eq 1 ] || { error "swap not found: ${SWAP:-$swap}"; rc=1; }
+  mountpoint -q /mnt || { error "root filesystem is not mounted at /mnt"; rc=1; }
+  mountpoint -q /mnt/efi || { error "EFI is not mounted at /mnt/efi"; rc=1; }
   [ "$rc" -eq 0 ] || exit 1
-  enable_cleanup_trap
+  trap trap_error EXIT ERR INT TERM
 }
 
 # Unmount volumes, close LVM group, close LUKS container
@@ -537,32 +531,25 @@ cleanup_mounts () {
   local rc=0
   status "Cleaning up mounts: "
   # Unmount boot partition
-  if mountpoint -q /mnt/efi; then
-    umount /mnt/efi || rc=1
-  fi
+  if mountpoint -q /mnt/efi; then umount /mnt/efi || rc=1; fi
   # Switch off swap (swapon may report /dev/dm-* instead of /dev/mapper/*)
   local swap="/dev/mapper/main-swap"
-  local active_swap swap_dev
+  local swap_path swap_dev
   swap_dev="$(stat -Lc '%t:%T' "$swap" 2>/dev/null || true)"
-  for active_swap in $(swapon --show=NAME --noheadings); do
-    if [ -n "$swap_dev" ] && [ "$(stat -Lc '%t:%T' "$active_swap" 2>/dev/null || true)" = "$swap_dev" ]; then
-      swapoff "$swap" || rc=1
+  for swap_path in $(swapon --show=NAME --noheadings); do
+    if [ -n "$swap_dev" ] && \
+    [ "$(stat -Lc '%t:%T' "$swap_path" 2>/dev/null || true)" = "$swap_dev" ]; then
+      swapoff "$swap_path" || rc=1
       break
     fi
   done
   # Unmount root partition
-  if mountpoint -q /mnt; then
-    umount /mnt || rc=1
-  fi
+  if mountpoint -q /mnt; then umount /mnt || rc=1; fi
   # Close LVM group
-  if vgs main >/dev/null 2>&1; then
-    vgchange -a n main || rc=1
-  fi
+  if vgs main >/dev/null 2>&1; then vgchange -a n main || rc=1; fi
   # Close LUKS container
-  if cryptsetup status lvm >/dev/null 2>&1; then
-    cryptsetup close lvm || rc=1
-  fi
-  success "Drives unmounted!" 
+  if cryptsetup status lvm >/dev/null 2>&1; then cryptsetup close lvm || rc=1; fi
+  [ "$rc" -eq 0 ] && success "Drives unmounted!" || fail "Something went wrong!"
   return "$rc"
 }
 
@@ -572,20 +559,13 @@ unmount_drives () {
   cleanup_mounts
 }
 
-# Handle installation errors by cleaning up mounted filesystems before exiting.
-cleanup_on_exit () {
+# Automatically unmount drives after a failed installation
+trap_error () {
   local rc=$?
-  trap - EXIT ERR INT TERM
-  error "Installation interrupted; attempting to unmount drives."
-  cleanup_mounts || true
+  error "Installation interrupted. Attempting to unmount drives..."
+  unmount_drives
   exit "$rc"
 }
-
-# Install cleanup handlers for normal exits, errors and interruption signals.
-enable_cleanup_trap () {
-  trap cleanup_on_exit EXIT ERR INT TERM
-}
-
 
 # -----------------------------------------------------------------------------
 # Main body of the script
@@ -676,20 +656,6 @@ if [ "$SCRIPT_MODE" -le 0 ]; then
     GPU_MODE="0"
   fi
   echo "GPU_MODE=${GPU_MODE}" >> ${CACHE_FILE}
-
-  # Prompt the user to choose security mode
-  if [ "${SERVER_MODE}" -eq 0 ]; then
-    title="Do you want advanced security settings?"
-    subtitle="Advanced security settings may cause some applications to break. "
-    subtitle+="Activate only if you know how to configure clamav."
-    options=("No additional security (default)" \
-      "Activate antivirus, sandboxing and Mandatory Access Control")
-    single_choice result options "$title" "$subtitle"
-    SECURITY_MODE="${result}"
-  else
-    SECURITY_MODE="1"
-  fi
-  echo "SECURITY_MODE=${SECURITY_MODE}" >> ${CACHE_FILE}
 
   # Clear CLI output
   title "<< PRE-INSTALLATION CHECKS >>\n"
@@ -812,7 +778,7 @@ if [ "$SCRIPT_MODE" -le 1 ]; then
   retry_cmd cryptsetup open --type luks ${LVM} lvm
   MAP_LVM="/dev/mapper/lvm"
   echo "MAP_LVM=${MAP_LVM}" >> ${CACHE_FILE}
-  enable_cleanup_trap
+  trap trap_error EXIT ERR INT TERM
 
   # Create LVM volumes, format and mount partitions
   highlight "\nCreating and mounting filesystems:"
@@ -850,75 +816,78 @@ if [ "$SCRIPT_MODE" -le 1 ]; then
 
 fi
 
-success "good"
-exit 0
-error "bad"
-
 
 # -----------------------------------------------------------------------------
-# Package installation.
+# Package installation
 # -----------------------------------------------------------------------------
 
 if [ "$SCRIPT_MODE" -le 2 ]; then
-  title "<< PACKAGE INSTALLATION >>\n"
-  # Provide instructions for updating pacman keys.
-  title "Is your USB installation medium too old?"
+
+  title "\n<< PACKAGE INSTALLATION >>\n"
+
+  # Provide instructions for updating pacman keys
+  highlight "Is your USB installation medium too old?"
   MSG_STR="If you have created the USB installation medium several months ago, "
-  MSG_STR+="package manager keys may have become outdated. In this case, "
-  MSG_STR+="next operation will fail. If it does, update pacman keys, by running:"
+  MSG_STR+="package manager keys may have become outdated.\n"
+  MSG_STR+="In this case, the next operation will fail. "
+  MSG_STR+="If this happens, update pacman keys, by running:"
   msg "${MSG_STR}"
   show_code "pacman-key --refresh-keys"
   msg "This operation takes few minutes, hence it is disabled by default."
   confirm "Did you read the above information"
-  # Optimize pacman.
-  title "\nLooking up fastest download mirrors, please wait and ignore warnings."
-  # Enable parallel downloads for pacstrap.
-  sed -i 's,#ParallelDownloads = 5,ParallelDownloads = 25,g' /etc/pacman.conf
-  sed -i 's,ParallelDownloads = 5,ParallelDownloads = 25,g' /etc/pacman.conf
-  # Find fastest pacman mirrors.
+
+  # Optimize pacman
+  highlight "\nLooking up fastest download mirrors, please wait and ignore warnings."
+  # Enable parallel downloads for pacstrap
+  sed -i 's,#ParallelDownloads = 5,ParallelDownloads = 20,g' /etc/pacman.conf
+  sed -i 's,ParallelDownloads = 5,ParallelDownloads = 20,g' /etc/pacman.conf
+  # Find fastest pacman mirrors
   reflector --country Austria,Germany --latest 15 --protocol https \
     --sort rate --save /etc/pacman.d/mirrorlist
-  # Update pacman cache.
+  # Update pacman cache
   pacman -Sy
-  # Create a list of packages.
+
+  # Create a list of packages
   PKGS=()
-  # Base Arch Linux system.
+  # Base Arch Linux system
   PKGS+=(base base-devel linux)
-  # Device firmware.
+  # Device firmware
   PKGS+=(linux-firmware linux-firmware-qlogic linux-firmware-liquidio)
   PKGS+=(linux-firmware-mellanox linux-firmware-nfp)
   PKGS+=(sof-firmware alsa-firmware "${MICROCODE}")
-  # UEFI and Secure Boot tools.
+  # UEFI and Secure Boot tools
   PKGS+=(efibootmgr sbctl fwupd)
-  # Logical volumes support.
+  # Logical volumes support
   PKGS+=(lvm2)
-  # Documentation.
+  # Documentation
   PKGS+=(man-db man-pages texinfo)
-  # CLI tools.
+  # CLI tools
   PKGS+=(zsh audit tmux neovim btop git go jq rsync powertop fdupes)
-  # CLI fonts.
+  # CLI fonts
   PKGS+=(terminus-font)
-  # Networking tools.
+  # Networking tools
   PKGS+=(networkmanager wpa_supplicant ufw iptables-nft)
+  # Hardening tools
+  PKGS+=(apparmor)
   # Software for a personal computer:
   if [ "${SERVER_MODE}" -eq 0 ]; then
-    # GNOME desktop environment - base packages.
+    # GNOME desktop environment - base packages
     PKGS+=(gdm gnome-control-center gnome-terminal)
     PKGS+=(wl-clipboard gnome-keyring xdg-desktop-portal)
     # xdg-desktop-portal-gnome installs:
     # wayland, nautilus, xdg-user-dirs-gtk, xdg-desktop-portal-gtk
     PKGS+=(xdg-desktop-portal-gnome)
     PKGS+=(network-manager-applet)
-    # Audio: pipewire is installed as dependency of gdm -> mutter.
+    # Audio: pipewire is installed as dependency of gdm -> mutter
     PKGS+=(pipewire-pulse pipewire-alsa pipewire-jack)
-    # Graphic splash screen for luks decryption.
+    # Graphic splash screen for luks decryption
     PKGS+=(plymouth)
     # Fonts.
     PKGS+=(adobe-source-code-pro-fonts otf-montserrat)
     PKGS+=(adobe-source-sans-fonts adobe-source-serif-fonts)
     PKGS+=(adobe-source-han-sans-otc-fonts adobe-source-han-serif-otc-fonts)
     PKGS+=(ttf-sourcecodepro-nerd)
-    # Flatpak: tools for sandboxing applications.
+    # Flatpak: tools for sandboxing applications
     PKGS+=(flatpak)
   fi
   # Intel/AMD iGPU drivers (default)
@@ -935,10 +904,6 @@ if [ "$SCRIPT_MODE" -le 2 ]; then
   if [ "${GPU_MODE}" -eq 2 ]; then
     PKGS+=(vulkan-radeon libva-mesa-driver mesa-vdpau)
   fi
-  # Hardening tools (if requested)
-  if [ "${SECURITY_MODE}" -eq 1 ]; then
-    PKGS+=(apparmor)
-  fi
   # Server software (if requested)
   if [ "${SERVER_MODE}" -eq 1 ]; then
     # Minimalistic SSH server implementation, good for initramfs
@@ -946,225 +911,379 @@ if [ "$SCRIPT_MODE" -le 2 ]; then
     # Docker
     PKGS+=(docker docker-compose)
   fi
-  # Install packages to the / (root) partition.
+
+  # Install packages to the / (root) partition
   retry_cmd pacstrap -K /mnt "${PKGS[@]}"
   success "Basic packages installed successfully!"
   confirm "Do you want to proceed with the installation"
-  # Enable daemons.
+
+  # Enable daemons
   systemctl enable ufw.service --root=/mnt &>/dev/null
   systemctl enable auditd.service --root=/mnt &>/dev/null
-  systemctl enable bluetooth --root=/mnt &>/dev/null
   systemctl enable NetworkManager --root=/mnt &>/dev/null
   systemctl enable wpa_supplicant.service --root=/mnt &>/dev/null
   systemctl enable systemd-resolved.service --root=/mnt &>/dev/null
-  systemctl enable gdm.service --root=/mnt &>/dev/null
   systemctl enable systemd-timesyncd.service --root=/mnt &>/dev/null
+  systemctl enable apparmor.service --root=/mnt &>/dev/null
+  if [ "${SERVER_MODE}" -eq 0 ]; then
+    systemctl enable bluetooth --root=/mnt &>/dev/null
+    systemctl enable gdm.service --root=/mnt &>/dev/null
+  fi
   if [ "${GPU_MODE}" -eq 1 ]; then
     systemctl enable nvidia-suspend.service --root=/mnt &>/dev/null
     systemctl enable nvidia-hibernate.service --root=/mnt &>/dev/null
     systemctl enable nvidia-resume.service --root=/mnt &>/dev/null
   fi
-  if [ "${SECURITY_MODE}" -eq 1 ]; then
-    systemctl enable apparmor.service --root=/mnt &>/dev/null
+
+  # Mask unused services
+  if [ "${SERVER_MODE}" -eq 0 ]; then
+    systemctl mask geoclue.service --root=/mnt &>/dev/null
+    systemctl mask org.gnome.SettingsDaemon.Wacom.service --root=/mnt &>/dev/null
+    systemctl mask org.gnome.SettingsDaemon.Smartcard.service --root=/mnt &>/dev/null
   fi
-  # Mask unused services.
-  systemctl mask geoclue.service --root=/mnt &>/dev/null
-  systemctl mask org.gnome.SettingsDaemon.Wacom.service --root=/mnt &>/dev/null
-  systemctl mask org.gnome.SettingsDaemon.Smartcard.service --root=/mnt &>/dev/null
 
 fi
 
 
-  # -----------------------------------------------------------------------------
-  # User configuration.
-  # -----------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
+# User configuration
+# -----------------------------------------------------------------------------
 
-  if [ "$SCRIPT_MODE" -le 3 ]; then
-    # Clear CLI output.
-    load_cache ; clear ; title "<< USER AND ROOT USER CONFIGURATION >>\n"
-    # Set hostname.
-    ask RESPONSE "Choose a hostname (name of this computer):" && HOSTNAME="${RESPONSE}"
-    echo "${HOSTNAME}" > /mnt/etc/hostname
-    MSG_STR="127.0.0.1   localhost\n"
-    MSG_STR+="::1         localhost\n"
-    MSG_STR+="127.0.1.1   ${HOSTNAME}.localdomain   ${HOSTNAME}"
-    echo -e "${MSG_STR}" > /mnt/etc/hosts
-    # Set up locale.
-    echo "en_IE.UTF-8 UTF-8"  > /mnt/etc/locale.gen
-    echo "LANG=en_IE.UTF-8" > /mnt/etc/locale.conf
-    echo "KEYMAP=us" >> /mnt/etc/vconsole.conf
-    echo "FONT=ter-132b" >> /mnt/etc/vconsole.conf
-    arch-chroot /mnt locale-gen &>/dev/null
-    # Set up the timezone.
-    arch-chroot /mnt ln -sf /usr/share/zoneinfo/Europe/Berlin /etc/localtime
-    # Set up users.
-    title "Choose a password for the root user:"
-    retry_cmd arch-chroot /mnt passwd
-    ask RESPONSE "Choose a username of a non-root user:" && USERNAME="${RESPONSE}"
-    arch-chroot /mnt useradd -m -G wheel -s /bin/zsh ${USERNAME}
-    title "Choose a password for ${USERNAME}:"
-    retry_cmd arch-chroot /mnt passwd ${USERNAME}
-    sed -i 's/# \(%wheel ALL=(ALL\(:ALL\|\)) ALL\)/\1/g' /mnt/etc/sudoers
+if [ "$SCRIPT_MODE" -le 3 ]; then
+
+  title "\n<< USER AND ROOT USER CONFIGURATION >>\n"
+
+  # Set hostname
+  ask RESPONSE "Choose a hostname (name of this computer):" && HOSTNAME="${RESPONSE}"
+  echo "${HOSTNAME}" > /mnt/etc/hostname
+  MSG_STR="127.0.0.1   localhost\n"
+  MSG_STR+="::1         localhost\n"
+  MSG_STR+="127.0.1.1   ${HOSTNAME}.localdomain   ${HOSTNAME}"
+  echo -e "${MSG_STR}" > /mnt/etc/hosts
+
+  # Set up locale
+  echo "en_IE.UTF-8 UTF-8"  > /mnt/etc/locale.gen
+  echo "LANG=en_IE.UTF-8" > /mnt/etc/locale.conf
+  echo "KEYMAP=us" >> /mnt/etc/vconsole.conf
+  echo "FONT=ter-132b" >> /mnt/etc/vconsole.conf
+  arch-chroot /mnt locale-gen &>/dev/null
+
+  # Set up the timezone
+  arch-chroot /mnt ln -sf /usr/share/zoneinfo/Europe/Berlin /etc/localtime
+
+  # Prepare initramfs SSH access for server installations
+  if [ "${SERVER_MODE}" -eq 1 ]; then
+
+    title="\n<< SSH KEY LOCATION >>"
+    subtitle="Choose the installation USB drive "
+    subtitle+="(entire block device, not a partition):"
+    raw=$(lsblk -dno NAME,SIZE,TRAN,MODEL |
+      awk -v OFS='|' '{
+        model = substr($0, index($0, $4),20)
+        print "/dev/" $1, $3, $2, model
+      }')
+    mapfile -t options < <(printf '%s\n' "$raw" | column -t -s "|" -o " | ")
+    single_choice result options "${title}" "${subtitle}"
+    USB_DISK="${options[$result]%% *}"
+    echo "USB_DISK=${USB_DISK}" >> ${CACHE_FILE}
+
+    USB_PART="$(lsblk -nrpo NAME,PARTNUM "${USB_DISK}" | awk '$2 == "3" { print $1; exit }')"
+    [ -n "${USB_PART}" ] || {
+      error "partition 3 is missing on ${USB_DISK}"
+      exit 1
+    }
+
+    mkdir -p /mnt/tmp/usbkey
+    mount "${USB_PART}" /mnt/tmp/usbkey
+    mkdir -p /mnt/etc/dropbear/initramfs
+    mkdir -p /mnt/etc/initcpio/install
+    mkdir -p /mnt/etc/systemd/network /mnt/etc/systemd/system
+
+    KEY_FILE="$(find /mnt/tmp/usbkey -maxdepth 2 \( -name authorized_keys -o -name '*.pub' \) | head -n 1)"
+    [ -n "${KEY_FILE}" ] || {
+      error "no public key found on ${USB_PART}"
+      umount /mnt/tmp/usbkey
+      rmdir /mnt/tmp/usbkey
+      exit 1
+    }
+    KEY_LINE="$(grep -m1 '^ssh-ed25519 ' "${KEY_FILE}" || true)"
+    [ -n "${KEY_LINE}" ] || {
+      error "ed25519 public key not found in ${KEY_FILE}"
+      umount /mnt/tmp/usbkey
+      rmdir /mnt/tmp/usbkey
+      exit 1
+    }
+    MSG_STR="no-port-forwarding,no-agent-forwarding,no-X11-forwarding "
+    MSG_STR+="${KEY_LINE}"
+    echo "${MSG_STR}" > /mnt/etc/dropbear/initramfs/authorized_keys
+    umount /mnt/tmp/usbkey
+    rmdir /mnt/tmp/usbkey
+
+    title="\n<< INITRAMFS NETWORK CONFIGURATION >>"
+    INITRD_ADDRESS="192.168.1.50/24"
+    INITRD_GATEWAY="192.168.1.1"
+    INITRD_DNS="${INITRD_GATEWAY}"
+    echo "INITRD_ADDRESS=${INITRD_ADDRESS}" >> ${CACHE_FILE}
+    echo "INITRD_GATEWAY=${INITRD_GATEWAY}" >> ${CACHE_FILE}
+    echo "INITRD_DNS=${INITRD_DNS}" >> ${CACHE_FILE}
+
+    MSG_STR="[Match]\n"
+    MSG_STR+="Name=en* eth*\n\n"
+    MSG_STR+="[Network]\n"
+    MSG_STR+="Address=${INITRD_ADDRESS}\n"
+    MSG_STR+="Gateway=${INITRD_GATEWAY}\n"
+    MSG_STR+="DNS=${INITRD_DNS}\n"
+    MSG_STR+="IPv6AcceptRA=no\n"
+    MSG_STR+="LinkLocalAddressing=no"
+    echo -e "${MSG_STR}" > /mnt/etc/systemd/network/20-initrd-wired.network
+
+    MSG_STR="[Unit]\n"
+    MSG_STR+="Description=Dropbear SSH server for initramfs unlock\n"
+    MSG_STR+="DefaultDependencies=no\n"
+    MSG_STR+="Wants=systemd-networkd.service\n"
+    MSG_STR+="After=systemd-networkd.service\n"
+    MSG_STR+="Before=cryptsetup.target remote-cryptsetup.target initrd-root-device.target\n"
+    MSG_STR+="ConditionPathExists=/etc/dropbear/initramfs/authorized_keys\n\n"
+    MSG_STR+="[Service]\n"
+    MSG_STR+="Type=simple\n"
+    MSG_STR+="ExecStart=/usr/bin/dropbear -R -E -F -p 23748 "
+    MSG_STR+="-s -j -k -I 300 -D /etc/dropbear/initramfs "
+    MSG_STR+="-r /etc/dropbear/initramfs/dropbear_host_key "
+    MSG_STR+="-c \"/usr/bin/systemd-tty-ask-password-agent --query\"\n"
+    MSG_STR+="KillMode=process\n\n"
+    MSG_STR+="[Install]\n"
+    MSG_STR+="WantedBy=initrd.target"
+    echo -e "${MSG_STR}" > /mnt/etc/systemd/system/dropbear-initramfs.service
+
+    MSG_STR="build() {\n"
+    MSG_STR+="  if ! declare -F add_systemd_unit >/dev/null; then\n"
+    MSG_STR+="    echo \"dropbear hook requires the systemd hook\" >&2\n"
+    MSG_STR+="    return 1\n"
+    MSG_STR+="  fi\n"
+    MSG_STR+="  add_binary /usr/bin/dropbear\n"
+    MSG_STR+="  add_binary /usr/bin/systemd-tty-ask-password-agent\n"
+    MSG_STR+="  add_file /etc/dropbear/initramfs/authorized_keys\n"
+    MSG_STR+="  add_file /etc/dropbear/initramfs/dropbear_host_key\n"
+    MSG_STR+="  add_file /etc/systemd/network/20-initrd-wired.network\n"
+    MSG_STR+="  add_systemd_unit dropbear-initramfs.service\n"
+    MSG_STR+="  add_systemd_unit systemd-networkd.service\n"
+    MSG_STR+="  add_systemd_unit systemd-networkd.socket\n"
+    MSG_STR+="  add_symlink /etc/systemd/system/initrd.target.wants/dropbear-initramfs.service "
+    MSG_STR+="../dropbear-initramfs.service\n"
+    MSG_STR+="}\n\n"
+    MSG_STR+="help() {\n"
+    MSG_STR+="  cat <<HELP\n"
+    MSG_STR+="Dropbear SSH server for initramfs remote unlocking\n"
+    MSG_STR+="HELP\n"
+    MSG_STR+="}\n"
+    echo -e "${MSG_STR}" > /mnt/etc/initcpio/install/dropbear
+
+    chmod +x /mnt/etc/initcpio/install/dropbear
+    arch-chroot /mnt dropbearkey -t ed25519 \
+      -f /etc/dropbear/initramfs/dropbear_host_key &>/dev/null
+  fi
+
+  # Set up users
+  title "Choose a password for the root user:"
+  retry_cmd arch-chroot /mnt passwd
+  ask RESPONSE "Choose a username for the admin user:" && ADMIN_USER="${RESPONSE}"
+  ask RESPONSE "Choose a username for the normal user:" && STANDARD_USER="${RESPONSE}"
+  arch-chroot /mnt useradd -m -G wheel -s /bin/zsh "${ADMIN_USER}"
+  arch-chroot /mnt useradd -m -s /bin/zsh "${STANDARD_USER}"
+  title "Choose a password for ${ADMIN_USER}:"
+  retry_cmd arch-chroot /mnt passwd "${ADMIN_USER}"
+  title "Choose a password for ${STANDARD_USER}:"
+  retry_cmd arch-chroot /mnt passwd "${STANDARD_USER}"
+  sed -i 's/# \(%wheel ALL=(ALL\(:ALL\|\)) ALL\)/\1/g' /mnt/etc/sudoers
+  if [ "${SERVER_MODE}" -eq 0 ]; then
     MSG_STR="[daemon]\n"
     MSG_STR+="WaylandEnable=True\n"
     MSG_STR+="AutomaticLoginEnable=True\n"
-    MSG_STR+="AutomaticLogin=${USERNAME}"
+    MSG_STR+="AutomaticLogin=${STANDARD_USER}"
     echo -e "${MSG_STR}" > /mnt/etc/gdm/custom.conf
-    # GitHub repository containing necessary dotfiles.
-    RESOURCES="https://git.ista.ac.at/mmaslov/scripts/-/raw/main/resources"
-    curl -s "${RESOURCES}/dotfiles/user.zshrc" > "/mnt/home/${USERNAME}/.zshrc"
-    curl -s "${RESOURCES}/dotfiles/root.zshrc" > "/mnt/root/.zshrc"
-    curl -s "${RESOURCES}/dotfiles/.bashrc" > "/mnt/home/${USERNAME}/.bashrc"
-    cp "/mnt/home/${USERNAME}/.bashrc" "/mnt/root/.bashrc"
-    arch-chroot /mnt chsh -s /bin/zsh
-    # Set up environment variables.
-    MSG_STR="EDITOR=nvim\n"
-    MSG_STR+="VISUAL=nvim\n"
-    MSG_STR+="# Choose Wayland by default.\n"
-    MSG_STR+="QT_QPA_PLATFORM=wayland;xcb\n"
-    MSG_STR+="ELECTRON_OZONE_PLATFORM_HINT=auto"
-    [ "${GPU_MODE}" -eq 1 ] && MSG_STR+="\nGBM_BACKEND=nvidia-drm"
-    echo -e "${MSG_STR}" > /mnt/etc/environment
+  fi
+
+  # GitHub repository containing necessary dotfiles
+  RESOURCES="https://raw.githubusercontent.com/mkmaslov/automate/refs/heads/main/lib"
+  curl -s "${RESOURCES}/dotfiles/.zshrc" > "/mnt/home/${ADMIN_USER}/.zshrc"
+  curl -s "${RESOURCES}/dotfiles/.zshrc" > "/mnt/home/${STANDARD_USER}/.zshrc"
+  curl -s "${RESOURCES}/dotfiles/.bashrc" > "/mnt/home/${ADMIN_USER}/.bashrc"
+  curl -s "${RESOURCES}/dotfiles/.zshrc" > "/mnt/root/.zshrc"
+  curl -s "${RESOURCES}/dotfiles/.bashrc" > "/mnt/home/${STANDARD_USER}/.bashrc"
+  cp "/mnt/home/${STANDARD_USER}/.bashrc" "/mnt/root/.bashrc"
+  arch-chroot /mnt chown -R "${ADMIN_USER}:${ADMIN_USER}" "/home/${ADMIN_USER}"
+  arch-chroot /mnt chown -R "${STANDARD_USER}:${STANDARD_USER}" "/home/${STANDARD_USER}"
+  arch-chroot /mnt chsh -s /bin/zsh "${ADMIN_USER}"
+  arch-chroot /mnt chsh -s /bin/zsh root
+
+  # Set up environment variables
+  MSG_STR="EDITOR=nvim\n"
+  MSG_STR+="VISUAL=nvim\n"
+  MSG_STR+="# Choose Wayland by default.\n"
+  MSG_STR+="QT_QPA_PLATFORM=wayland;xcb\n"
+  MSG_STR+="ELECTRON_OZONE_PLATFORM_HINT=auto"
+  [ "${GPU_MODE}" -eq 1 ] && MSG_STR+="\nGBM_BACKEND=nvidia-drm"
+  echo -e "${MSG_STR}" > /mnt/etc/environment
+
+  if [ "${SERVER_MODE}" -eq 0 ]; then
     # Configure Plymouth theme
     echo "Theme=bgrt" >> /mnt/etc/plymouth/plymouthd.conf
     echo "ShowDelay=0" >> /mnt/etc/plymouth/plymouthd.conf
+  fi
+  
+  if [ "${SERVER_MODE}" -eq 0 ]; then
     # Create default directory for PulseAudio. (to avoid journalctl warning)
     mkdir -p /mnt/etc/pulse/default.pa.d
-    # Enable parallel downloads in pacman.
-    sed -i 's,#ParallelDownloads = 5,ParallelDownloads = 25,g' /mnt/etc/pacman.conf
-    sed -i 's,ParallelDownloads = 5,ParallelDownloads = 25,g' /mnt/etc/pacman.conf
-    # Enable colors in pacman.
-    sed -i "s,#Color,Color,g" /mnt/etc/pacman.conf
-    if [ "${SECURITY_MODE}" -eq 1 ]; then
-      # Enable AppArmor cache.
-      sed -i "s,#write-cache,write-cache,g" /mnt/etc/apparmor/parser.conf
-    fi
-    # Configure firewall.
-    arch-chroot /mnt /usr/bin/ufw enable
-    arch-chroot /mnt /usr/bin/ufw default deny incoming
-    arch-chroot /mnt /usr/bin/ufw default allow outgoing
-    confirm "Do you want to proceed with the installation"
-
   fi
+  # Enable parallel downloads in pacman.
+  sed -i 's,#ParallelDownloads = 5,ParallelDownloads = 25,g' /mnt/etc/pacman.conf
+  sed -i 's,ParallelDownloads = 5,ParallelDownloads = 25,g' /mnt/etc/pacman.conf
+  # Enable colors in pacman.
+  sed -i "s,#Color,Color,g" /mnt/etc/pacman.conf
+  # Enable AppArmor cache.
+  sed -i "s,#write-cache,write-cache,g" /mnt/etc/apparmor/parser.conf
+  # Configure firewall.
+  arch-chroot /mnt /usr/bin/ufw enable
+  arch-chroot /mnt /usr/bin/ufw default deny incoming
+  arch-chroot /mnt /usr/bin/ufw default allow outgoing
+  confirm "Do you want to proceed with the installation"
 
+fi
 
-  # -----------------------------------------------------------------------------
-  # Unified Kernel Image configuration.
-  # -----------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
+# Unified Kernel Image configuration
+# -----------------------------------------------------------------------------
 
-  if [ "$SCRIPT_MODE" -le 4 ]; then
-    # Clear CLI output.
-    load_cache ; clear ; title "<< UNIFIED KERNEL IMAGE CREATION >>\n"
-    # Configure disk mapping during decryption.
-    MSG_STR="lvm UUID=${LVM_UUID} - luks,password-echo=no,"
-    MSG_STR+="x-systemd.device-timeout=0,timeout=0,no-read-workqueue,"
-    MSG_STR+="no-write-workqueue,discard"
-    echo -e "${MSG_STR}" >> /mnt/etc/crypttab.initramfs
-    # Configure disk mapping after decryption.
-    MSG_STR="UUID=${EFI_UUID}    /efi   vfat    "
-    MSG_STR+="defaults,fmask=0077,dmask=0077   0    0\n"
-    MSG_STR+="UUID=${ROOT_UUID}   /      ext4    "
-    MSG_STR+="defaults                         0    0\n"
-    MSG_STR+="UUID=${SWAP_UUID}   none   swap    "
-    MSG_STR+="defaults                         0    0\n"
-    echo -e "${MSG_STR}" >> /mnt/etc/fstab
-    # Change mkinitcpio hooks.
-    MSG_STR="s,HOOKS=(base udev autodetect microcode modconf kms keyboard "
-    MSG_STR+="keymap consolefont block filesystems fsck),HOOKS=(base systemd "
-    MSG_STR+="keyboard autodetect microcode modconf kms sd-vconsole block "
+if [ "$SCRIPT_MODE" -le 4 ]; then
+  
+  title "\n<< UNIFIED KERNEL IMAGE CREATION >>\n"
+
+  # Configure disk mapping during decryption
+  MSG_STR="lvm UUID=${LVM_UUID} - luks,password-echo=no,"
+  MSG_STR+="x-systemd.device-timeout=0,timeout=0,no-read-workqueue,"
+  MSG_STR+="no-write-workqueue,discard"
+  echo -e "${MSG_STR}" >> /mnt/etc/crypttab.initramfs
+
+  # Configure disk mapping after decryption
+  MSG_STR="UUID=${EFI_UUID}    /efi   vfat    "
+  MSG_STR+="defaults,fmask=0077,dmask=0077   0    0\n"
+  MSG_STR+="UUID=${ROOT_UUID}   /      ext4    "
+  MSG_STR+="defaults                         0    0\n"
+  MSG_STR+="UUID=${SWAP_UUID}   none   swap    "
+  MSG_STR+="defaults                         0    0\n"
+  echo -e "${MSG_STR}" >> /mnt/etc/fstab
+
+  # Change mkinitcpio hooks
+  MSG_STR="s,HOOKS=(base udev autodetect microcode modconf kms keyboard "
+  MSG_STR+="keymap consolefont block filesystems fsck),HOOKS=(base systemd "
+  MSG_STR+="keyboard autodetect microcode modconf kms sd-vconsole block "
+  if [ "${SERVER_MODE}" -eq 1 ]; then
+    MSG_STR+="dropbear sd-encrypt lvm2 filesystems fsck),g"
+  else
     MSG_STR+="plymouth sd-encrypt lvm2 filesystems fsck),g"
+  fi
+  sed -i "${MSG_STR}" /mnt/etc/mkinitcpio.conf
+  
+  # Add mkinitcpio modules for NVIDIA driver
+  if [ "${GPU_MODE}" -eq 1 ]; then
+    MSG_STR="s,MODULES=(),MODULES=(nvidia "
+    MSG_STR+="nvidia_modeset nvidia_uvm nvidia_drm),g"
     sed -i "${MSG_STR}" /mnt/etc/mkinitcpio.conf
-    # Add mkinitcpio modules for NVIDIA driver.
-    if [ "${GPU_MODE}" -eq 1 ]; then
-      MSG_STR="s,MODULES=(),MODULES=(nvidia "
-      MSG_STR+="nvidia_modeset nvidia_uvm nvidia_drm),g"
-      sed -i "${MSG_STR}" /mnt/etc/mkinitcpio.conf
-    fi
-    # Create Unified Kernel Image.
-    title "Creating Unified Kernel Image:"
-    # Kernel parameters: disk mapping.
-    CMDLINE="root=UUID=${ROOT_UUID} resume=UUID=${SWAP_UUID} "
-    CMDLINE+="cryptdevice=UUID=${LVM_UUID}:main rw "
-    # Fallback image should contain minimal amount of kernel parameters.
-    echo ${CMDLINE} > /mnt/etc/kernel/cmdline_fallback
-    # Kernel parameters: NVIDIA drivers.
-    if [ "${GPU_MODE}" -eq 1 ]; then
-      CMDLINE+="nvidia_drm.modeset=1 nvidia_drm.fbdev=1 "
-      MSG_STR="options nvidia NVreg_PreserveVideoMemoryAllocations=1 "
-      MSG_STR+="NVreg_TemporaryFilePath=/var/tmp"
-      echo "${MSG_STR}" > /mnt/etc/modprobe.d/nvidia-power-management.conf
-    fi
-    # Kernel parameters: LUKS splash screen.
+  else
+    # Prevent NVIDIA modules from being auto-loaded on non-NVIDIA systems
+    MSG_STR="blacklist nvidia\n"
+    MSG_STR+="blacklist nvidia_drm\n"
+    MSG_STR+="blacklist nvidia_modeset\n"
+    MSG_STR+="blacklist nvidia_uvm\n"
+    MSG_STR+="blacklist nouveau"
+    echo -e "${MSG_STR}" > /mnt/etc/modprobe.d/disable-nvidia.conf
+  fi
+
+  # Create Unified Kernel Image
+  title "Creating Unified Kernel Image:"
+  # Kernel parameters: disk mapping
+  CMDLINE="root=UUID=${ROOT_UUID} resume=UUID=${SWAP_UUID} "
+  CMDLINE+="cryptdevice=UUID=${LVM_UUID}:main rw "
+  # Fallback image should contain minimal amount of kernel parameters
+  echo ${CMDLINE} > /mnt/etc/kernel/cmdline_fallback
+  # Kernel parameters: NVIDIA drivers
+  if [ "${GPU_MODE}" -eq 1 ]; then
+    CMDLINE+="nvidia_drm.modeset=1 nvidia_drm.fbdev=1 "
+    MSG_STR="options nvidia NVreg_PreserveVideoMemoryAllocations=1 "
+    MSG_STR+="NVreg_TemporaryFilePath=/var/tmp"
+    echo "${MSG_STR}" > /mnt/etc/modprobe.d/nvidia-power-management.conf
+  fi
+  # Kernel parameters: LUKS splash screen
+  if [ "${SERVER_MODE}" -eq 0 ]; then
     CMDLINE+="quiet splash "
-    # Kernel parameters: Audit framework.
-    CMDLINE+="audit=1 "
-    # Kernel parameters: AppArmor
-    if [ "${SECURITY_MODE}" -eq 1 ]; then
-      CMDLINE+="lsm=landlock,lockdown,yama,integrity,apparmor,bpf "
-      CMDLINE+="apparmor=1 security=apparmor lockdown=integrity "
-    fi
-    # Kernel parameters: mitigations against CPU vulnerabilities.
-    CMDLINE+="mitigations=auto "
-    # Kernel parameters: disable IPv6.
-    CMDLINE+="ipv6.disable=1 "
-    echo ${CMDLINE} > /mnt/etc/kernel/cmdline
-    # Create mkinitcpio preset.
-    MSG_STR="ALL_config=\"/etc/mkinitcpio.conf\"\n"
-    MSG_STR+="ALL_kver=\"/boot/vmlinuz-linux\"\n"
-    MSG_STR+="PRESETS=('default' 'fallback')\n"
-    MSG_STR+="default_uki=\"/efi/EFI/Linux/arch-linux.efi\"\n"
-    MSG_STR+="fallback_options=\"-S autodetect --cmdline /etc/kernel/cmdline_fallback\"\n"
-    MSG_STR+="fallback_uki=\"/efi/EFI/Linux/arch-linux-fallback.efi\""
-    echo -e "${MSG_STR}" > /mnt/etc/mkinitcpio.d/linux.preset
-    # Generate UKI.
-    mkdir -p /mnt/efi/EFI/Linux && arch-chroot /mnt mkinitcpio -P
-    # Remove exposed initramfs files.
-    rm /mnt/efi/initramfs-*.img &>/dev/null || true
-    rm /mnt/boot/initramfs-*.img &>/dev/null || true
-    confirm "Do you want to proceed with the installation"
-
   fi
+  # Kernel parameters: Audit framework
+  CMDLINE+="audit=1 "
+  # Kernel parameters: AppArmor
+  CMDLINE+="lsm=landlock,lockdown,yama,integrity,apparmor,bpf "
+  CMDLINE+="apparmor=1 security=apparmor lockdown=integrity "
+  # Kernel parameters: mitigations against CPU vulnerabilities
+  CMDLINE+="mitigations=auto "
+  # Kernel parameters: disable IPv6
+  CMDLINE+="ipv6.disable=1 "
+  echo ${CMDLINE} > /mnt/etc/kernel/cmdline
+  # Create mkinitcpio preset
+  MSG_STR="ALL_config=\"/etc/mkinitcpio.conf\"\n"
+  MSG_STR+="ALL_kver=\"/boot/vmlinuz-linux\"\n"
+  MSG_STR+="PRESETS=('default' 'fallback')\n"
+  MSG_STR+="default_uki=\"/efi/EFI/Linux/arch-linux.efi\"\n"
+  MSG_STR+="fallback_options=\"-S autodetect --cmdline /etc/kernel/cmdline_fallback\"\n"
+  MSG_STR+="fallback_uki=\"/efi/EFI/Linux/arch-linux-fallback.efi\""
+  echo -e "${MSG_STR}" > /mnt/etc/mkinitcpio.d/linux.preset
+  # Generate UKI
+  mkdir -p /mnt/efi/EFI/Linux && arch-chroot /mnt mkinitcpio -P
+  # Remove exposed initramfs files.
+  rm /mnt/efi/initramfs-*.img &>/dev/null || true
+  rm /mnt/boot/initramfs-*.img &>/dev/null || true
+  confirm "Do you want to proceed with the installation"
 
+fi
 
-  # -----------------------------------------------------------------------------
-  # Secure Boot and UEFI configuration.
-  # -----------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
+# Secure Boot and UEFI configuration
+# -----------------------------------------------------------------------------
 
-  if [ "$SCRIPT_MODE" -le 5 ]; then
-    # Clear CLI output.
-    load_cache ; clear ; title "<< SECURE BOOT AND UEFI CONFIGURATION >>\n"
-    # Configure Secure Boot.
-    title "Configuring Secure Boot:"
-    title "WARNING! This operation may display some errors, ignore them unless the script fails."
-    # In some cases, the following command is required before enrolling keys:
-    # chattr -i /sys/firmware/efi/efivars/{KEK,db}* || true
-    # Create Secure Boot keys.
-    arch-chroot /mnt sbctl create-keys
-    # Enroll Secure Boot keys.
-    # If default enrollment does not work - enroll using --microsoft flag.
-    set +e ; arch-chroot /mnt sbctl enroll-keys ; status=$? ; set -e
-    [ "${status}" -ne 0 ] && arch-chroot /mnt sbctl enroll-keys --microsoft
-    # Sign UKIs using Secure Boot keys.
-    arch-chroot /mnt sbctl sign --save /efi/EFI/Linux/arch-linux.efi
-    arch-chroot /mnt sbctl sign --save /efi/EFI/Linux/arch-linux-fallback.efi
-    confirm "Do you want to proceed with the installation"
-    # Create UEFI boot entries.
-    title "\nCreating UEFI boot entries:"
-    if [ "${DUAL_BOOT_MODE}" -eq 0 ]; then PART_NUM=1; else PART_NUM=5; fi
-    efibootmgr --create --disk ${DISK} --part ${PART_NUM} \
-      --label "Arch Linux" --loader "EFI\\Linux\\arch-linux.efi"
-    efibootmgr --create --disk ${DISK} --part ${PART_NUM} \
-      --label "Arch Linux (fallback)" --loader "EFI\\Linux\\arch-linux-fallback.efi"
-    success "UEFI boot entries successfully created!"
-    confirm "Finish the installation"
-    # Finish the installation.
-    clear ; success "<< Arch Linux installation completed!>>\n"
-    efibootmgr
-    HELP_UEFI
+if [ "$SCRIPT_MODE" -le 5 ]; then
+  
+  title "\n<< SECURE BOOT AND UEFI CONFIGURATION >>\n"
+  
+  # Configure Secure Boot
+  highlight "Configuring Secure Boot:"
+  highlight "This operation may display some errors, ignore them unless the script fails."
+  # In some cases, the following command is required before enrolling keys:
+  # chattr -i /sys/firmware/efi/efivars/{KEK,db}* || true
+  # Create Secure Boot keys
+  arch-chroot /mnt sbctl create-keys
+  # Enroll Secure Boot keys
+  # If default enrollment does not work - enroll using --microsoft flag
+  set +e ; arch-chroot /mnt sbctl enroll-keys ; status=$? ; set -e
+  [ "${status}" -ne 0 ] && arch-chroot /mnt sbctl enroll-keys --microsoft
+  # Sign UKIs using Secure Boot keys
+  arch-chroot /mnt sbctl sign --save /efi/EFI/Linux/arch-linux.efi
+  arch-chroot /mnt sbctl sign --save /efi/EFI/Linux/arch-linux-fallback.efi
+  confirm "Do you want to proceed with the installation"
+  # Create UEFI boot entries
+  title "\nCreating UEFI boot entries:"
+  if [ "${DUAL_BOOT_MODE}" -eq 0 ]; then PART_NUM=1; else PART_NUM=5; fi
+  efibootmgr --create --disk ${DISK} --part ${PART_NUM} \
+    --label "Arch Linux" --loader "EFI\\Linux\\arch-linux.efi"
+  efibootmgr --create --disk ${DISK} --part ${PART_NUM} \
+    --label "Arch Linux (fallback)" --loader "EFI\\Linux\\arch-linux-fallback.efi"
+  success "UEFI boot entries successfully created!"
+  confirm "Finish the installation"
+  # Finish the installation.
+  clear ; success "<< Arch Linux installation completed!>>\n"
+  efibootmgr
+  HELP_UEFI
 
-  fi
+fi
 
-  # Unmount partitions, close LUKS container.
-  unmount_drives
+# Unmount partitions, close LUKS container.
+unmount_drives
 
-  # -----------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
