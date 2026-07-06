@@ -854,7 +854,11 @@ if [ "$SCRIPT_MODE" -le 5 ]; then
   arch-chroot /mnt sbctl create-keys
   # Enroll Secure Boot keys
   # If default enrollment does not work - enroll using --microsoft flag
-  set +e ; arch-chroot /mnt sbctl enroll-keys ; status=$? ; set -e
+  if arch-chroot /mnt sbctl enroll-keys; then
+    status=0
+  else
+    status=$?
+  fi
   [ "${status}" -ne 0 ] && arch-chroot /mnt sbctl enroll-keys --microsoft
   # Sign UKIs using Secure Boot keys
   arch-chroot /mnt sbctl sign --save /efi/EFI/Linux/arch-linux.efi
@@ -876,7 +880,7 @@ if [ "$SCRIPT_MODE" -le 5 ]; then
 
 fi
 
-# Unmount partitions, close LUKS container.
+# Unmount partitions, close LUKS container
 unmount_drives
 
 # -----------------------------------------------------------------------------
