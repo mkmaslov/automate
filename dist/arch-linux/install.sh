@@ -1174,15 +1174,26 @@ if [ "$SCRIPT_MODE" -le 4 ]; then
   echo -e "${MSG_STR}" >> /mnt/etc/fstab
 
   # Change mkinitcpio hooks
-  MSG_STR="s,HOOKS=(base udev autodetect microcode modconf kms keyboard "
-  MSG_STR+="keymap consolefont block filesystems fsck),HOOKS=(base systemd "
-  MSG_STR+="keyboard autodetect microcode modconf kms sd-vconsole block "
-  if [ "${SERVER_MODE}" -eq 1 ]; then
-    MSG_STR+="dropbear sd-encrypt lvm2 filesystems fsck),g"
+  #MSG_STR="s,HOOKS=(base udev autodetect microcode modconf kms keyboard "
+  #MSG_STR+="keymap consolefont block filesystems fsck),HOOKS=(base systemd "
+  #MSG_STR+="keyboard autodetect microcode modconf kms sd-vconsole block "
+  #if [ "${SERVER_MODE}" -eq 1 ]; then
+  #  MSG_STR+="dropbear sd-encrypt lvm2 filesystems fsck),g"
+  #else
+  #  MSG_STR+="plymouth sd-encrypt lvm2 filesystems fsck),g"
+  #fi
+  #sed -i "${MSG_STR}" /mnt/etc/mkinitcpio.conf
+
+  # Change mkinitcpio hooks
+  hooks=(base systemd keyboard autodetect microcode modconf kms sd-vconsole block)
+  [ "${SERVER_MODE}" -eq 1 ] && hooks+=(dropbear) || hooks+=(plymouth)
+  hooks+=(sd-encrypt lvm2 filesystems fsck)
+  hooks_line="HOOKS=(${hooks[*]})"
+  if grep -qE '^[[:space:]]*HOOKS=' /mnt/etc/mkinitcpio.conf; then
+    sed -i -E "s|^[[:space:]]*HOOKS=.*|${hooks_line}|" /mnt/etc/mkinitcpio.conf
   else
-    MSG_STR+="plymouth sd-encrypt lvm2 filesystems fsck),g"
+    printf '\n%s\n' "${hooks_line}" >> /mnt/etc/mkinitcpio.conf
   fi
-  sed -i "${MSG_STR}" /mnt/etc/mkinitcpio.conf
   
   # Add mkinitcpio modules for NVIDIA driver
   if [ "${GPU_MODE}" -eq 1 ]; then
