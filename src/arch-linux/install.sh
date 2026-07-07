@@ -529,6 +529,7 @@ if [ "$SCRIPT_MODE" -le 2 ]; then
   fi
 
   # Mask unused services
+  sudo systemctl mask 'systemd-pcrlogin@.service' --root=/mnt &>/dev/null
   if [ "${SERVER_MODE}" -eq 0 ]; then
     systemctl mask geoclue.service --root=/mnt &>/dev/null
     systemctl mask org.gnome.SettingsDaemon.Wacom.service --root=/mnt &>/dev/null
