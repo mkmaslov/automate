@@ -19,7 +19,7 @@ set -Eeuo pipefail
 # VARIABLES
 #══════════════════════════════════════════════════════════════════════════════
 
-URL_REPO="https://git.ista.ac.at/mmaslov/automate/-/raw/main/"
+URL_REPO="https://raw.githubusercontent.com/mkmaslov/automate/main"
 
 #══════════════════════════════════════════════════════════════════════════════
 # FUNCTIONS
