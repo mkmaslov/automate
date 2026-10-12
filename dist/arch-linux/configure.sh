@@ -51,24 +51,26 @@ cprint() {
 }
 
 # Display a title
-title() { cprint 1 "$BLUE" "${1}\n"; }
+title() { cprint 1 "$BLUE" "$*\n"; }
 # Display a message
-msg() { cprint 1 "$COLOR_OFF" "${1}\n"; }
+msg() { cprint 1 "$COLOR_OFF" "$*\n"; }
 # Display a highlighted message
-highlight() { cprint 1 "$WHITE" "${1}\n"; }
-# Display a status line
-status() { cprint 1 "$WHITE" "${1}"; }
+highlight() { cprint 1 "$WHITE" "$*\n"; }
+# Display a status line without a newline
+status() { cprint 1 "$WHITE" "$*"; }
 # Display code or terminal commands
-show_code() { cprint 1 "$WHITE" "->  ${1}\n"; }
+show_code() { cprint 1 "$WHITE" "->  $*\n"; }
 # Display a success message
-success() { cprint 1 "$GREEN" "${1}\n"; }
+success() { cprint 1 "$GREEN" "$*\n"; }
 # Display a failure message
-fail() { cprint 2 "$RED" "${1}\n"; }
+fail() { cprint 2 "$RED" "$*\n"; }
 # Display an error message
-error() { cprint 2 "$RED" "ERROR: ${1}\n"; }
+error() { cprint 2 "$RED" "ERROR: $*\n"; }
 # Display a warning message
-warning() { cprint 1 "$YELLOW" "WARN: ${1}\n"; }
-# Display an error, if function argument is not provided
+warning() { cprint 2 "$YELLOW" "WARN: $*\n"; }
+# Display an error and terminate the script
+terminate() { error "$@"; exit 1; }
+# Report a missing argument without terminating the script
 bad_arg() { error "$1 called without argument: $2"; return 1; }
 
 #------------------------------------------------------------------------------
@@ -239,6 +241,22 @@ fetch_git() {
 # -----------------------------------------------------------------------------
 # Command verification
 # -----------------------------------------------------------------------------
+
+# Show script-specific usage and exit
+usage() {
+  [[ -n "${USAGE:-}" ]] || terminate "USAGE is not defined"
+  fail "Usage: ${0##*/} $USAGE"
+  exit 1
+}
+
+# Check required OPTION VALUE pairs after parsing
+# Syntax: require_args -n "$NAME"
+require_args() {
+  while (( $# )); do
+    [[ -n "$2" ]] || { error "Missing argument: $1"; usage; }
+    shift 2
+  done
+}
 
 check_sudo() {
   if [ "$(id -u)" -eq 0 ] || \
