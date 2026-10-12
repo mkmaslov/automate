@@ -6,10 +6,7 @@ set -euo pipefail
 # Use ./bundle.sh to generate scripts in ../dist/ from templates in ../src/
 #------------------------------------------------------------------------------
 
-PRE=$'\033[1;31m'
-MSG='ERROR: this is a template script, do NOT run this'
-POST=$'\033[0m'
-printf '%s%s%s\n' "$PRE" "$MSG" "$POST" >&2
+printf '\e[1;31mERROR: this is a template script, do NOT run this\e[0m\n' >&2
 return 1 2>/dev/null || exit 1
 
 # BEGIN_SHARED
@@ -286,6 +283,14 @@ detect_pkg_mgr() {
     error "Unsupported package manager!"
     return 1
   fi
+}
+
+# Detect the current operating system
+detect_os() {
+  case "$OSTYPE" in
+    darwin*) printf '%s\n' macos ;;
+    linux*)  . /etc/os-release; printf '%s\n' "$ID" ;;
+  esac
 }
 
 require_cmd() {

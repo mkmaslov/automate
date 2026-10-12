@@ -6,13 +6,12 @@ set -euo pipefail
 # -----------------------------------------------------------------------------
 
 # BEGIN_SHARED
-# -----------------------------------------------------------------------------
-PRE=$'\033[1;31m'
-MSG='ERROR: this is a template script, do NOT run this'
-POST=$'\033[0m'
-printf '%s%s%s\n' "$PRE" "$MSG" "$POST" >&2
+#------------------------------------------------------------------------------
+# This is a placeholder replaced with "shared.sh" when bundling.
+# The script fails if the template is run directly.
+printf '\e[1;31mERROR: this is a template script, do NOT run this\e[0m\n' >&2
 return 1 2>/dev/null || exit 1
-# -----------------------------------------------------------------------------
+#------------------------------------------------------------------------------
 # END_SHARED
 
 #------------------------------------------------------------------------------

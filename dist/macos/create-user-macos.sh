@@ -280,6 +280,14 @@ detect_pkg_mgr() {
   fi
 }
 
+# Detect the current operating system
+detect_os() {
+  case "$OSTYPE" in
+    darwin*) printf '%s\n' macos ;;
+    linux*)  . /etc/os-release; printf '%s\n' "$ID" ;;
+  esac
+}
+
 require_cmd() {
   local CMD="$1"
   local PKG="${2:-$1}"
