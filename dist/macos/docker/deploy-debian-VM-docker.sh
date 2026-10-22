@@ -59,6 +59,12 @@ for SCRIPT in configure-zsh.sh configure-nvim.sh configure-tmux.sh install-docke
   curl -fsSL "$SCRIPTS_URL/$SCRIPT" -o "$PATH_SETUP/$SCRIPT"
 done
 
+# Docker deployment script is in different folder that is not being wiped by the installer.
+curl -fsSL "${SCRIPTS_URL%/linux}/docker/deploy-container.sh" \
+  -o "$vm_home/deploy-container.sh"
+chown "$VM_USER:$vm_group" "$vm_home/deploy-container.sh"
+chmod 0755 "$vm_home/deploy-container.sh"
+
 # Configure both users' shell environments.
 for USERNAME in root "$VM_USER"; do
   for SCRIPT in configure-zsh.sh configure-nvim.sh configure-tmux.sh; do

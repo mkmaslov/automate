@@ -485,9 +485,9 @@ read -r KEY_TYPE KEY_DATA _ <<< "$SSH_PUBLIC_KEY"
 [[ "$KEY_TYPE" == ssh-ed25519 && "$KEY_DATA" =~ ^[a-zA-Z0-9+/=]+$ ]] ||
   terminate 'Expected an ssh-ed25519 public key'
 
-msg 'Set root password:'
+highlight 'Set password for user: root'
 ROOT_HASH="$(openssl passwd -6)"
-msg "Set password for $VM_USER:"
+highlight "Set password for user: $VM_USER"
 USER_HASH="$(openssl passwd -6)"
 
 cd "$(dirname "$0")"
