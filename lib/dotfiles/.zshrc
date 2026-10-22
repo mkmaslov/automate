@@ -13,7 +13,7 @@ if [[ "$TERM" == linux ]]; then
   BG_GREEN="{green}"
   BG_BLUE="{blue}"
   BG_MAGENTA="{magenta}"
-  SEPARATOR=">"
+  SEPARATOR=""
 else
   FG_BLACK="{000}"
   BG_RED="{009}"
@@ -43,6 +43,7 @@ if is_privileged; then
 fi
 PS1_USER="%F${FG_USER}%K${BG_USER} %n [${HOST_NAME}%T] %F${BG_USER}%K${BG_DIR}${SEPARATOR}"
 PS1_DIR="%F${FG_DIR}%K${BG_DIR}%4~ %F${BG_DIR}%k${SEPARATOR}%f "
+export PS1="${PS1_USER} ${PS1_DIR}"
 # Turn off all beeps
 unsetopt BEEP
 # Pass tty to GPG
