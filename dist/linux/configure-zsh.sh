@@ -82,6 +82,15 @@ ask() {
   printf -v "$output_var" '%s' "$input"
 }
 
+# Prompt user for a hidden text response
+ask_secret() {
+  local output_var="$1" input
+  cprint 1 "$BLUE" "${2:-} "
+  IFS= read -rs input
+  printf '\n'
+  printf -v "$output_var" '%s' "$input"
+}
+
 # Confirm further evaluation or exit
 confirm_or_exit() {
   local response
