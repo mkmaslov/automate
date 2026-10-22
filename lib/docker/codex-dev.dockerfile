@@ -34,7 +34,7 @@ ENV PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
 # Bootstrap dependencies; scripts install their own tools.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates curl git locales python3-venv passwd nodejs \
+    ca-certificates curl git locales python3-venv passwd nodejs gnupg \
     npm zsh neovim tmux openssh-server && rm -rf /var/lib/apt/lists/*
 
 # /opt/setup is inside the image, not on the Mac.

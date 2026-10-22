@@ -7,11 +7,21 @@ HISTFILE=~/.zsh_history
 HISTSIZE=50000
 SAVEHIST=50000
 # Set custom prompt
-FG_BLACK="{000}"
-BG_RED="{009}" 
-BG_GREEN="{010}"
-BG_BLUE="{012}"
-BG_MAGENTA="{013}"  
+if [[ "$TERM" == linux ]]; then
+  FG_BLACK="{black}"
+  BG_RED="{red}"
+  BG_GREEN="{green}"
+  BG_BLUE="{blue}"
+  BG_MAGENTA="{magenta}"
+  SEPARATOR=">"
+else
+  FG_BLACK="{000}"
+  BG_RED="{009}"
+  BG_GREEN="{010}"
+  BG_BLUE="{012}"
+  BG_MAGENTA="{013}"
+  SEPARATOR=""
+fi
 FG_USER=${FG_BLACK}
 FG_DIR=${FG_BLACK}
 BG_DIR=${BG_GREEN}
@@ -31,9 +41,8 @@ fi
 if is_privileged; then
   BG_USER=${BG_RED}
 fi
-PS1_USER="%F${FG_USER}%K${BG_USER} %n [${HOST_NAME}%T] %F${BG_USER}%K${BG_DIR}"
-PS1_DIR="%F${FG_DIR}%K${BG_DIR}%4~ %F${BG_DIR}%K{reset_color}%F{reset_color} "
-export PS1="${PS1_USER} ${PS1_DIR}"
+PS1_USER="%F${FG_USER}%K${BG_USER} %n [${HOST_NAME}%T] %F${BG_USER}%K${BG_DIR}${SEPARATOR}"
+PS1_DIR="%F${FG_DIR}%K${BG_DIR}%4~ %F${BG_DIR}%k${SEPARATOR}%f "
 # Turn off all beeps
 unsetopt BEEP
 # Pass tty to GPG
